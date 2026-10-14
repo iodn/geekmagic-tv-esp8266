@@ -147,6 +147,7 @@ textarea {
     min-width: 0;
 }
 .brand-mark {
+    flex-shrink: 0;
     width: 44px;
     height: 44px;
     border-radius: 16px;
@@ -168,6 +169,9 @@ textarea {
     font-size: 1.28rem;
     font-weight: 600;
     letter-spacing: -0.03em;
+}
+.brand > div {
+    min-width: 0;
 }
 .brand small {
     display: block;
@@ -389,6 +393,7 @@ textarea {
     color: var(--accent-strong);
 }
 .panel {
+    min-width: 0;
     background: var(--panel-layer);
     border: 1px solid var(--panel-border);
     border-radius: var(--radius);
@@ -523,6 +528,11 @@ textarea {
 input[type="range"] {
     width: 100%;
     accent-color: var(--accent);
+}
+input[type="file"] {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
 }
 .slider-row {
     display: grid;
@@ -866,6 +876,9 @@ input[type="submit"]:disabled,
 }
 .identity-line strong,
 .identity-line code {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    text-align: right;
     color: var(--ink);
     font-size: 0.86rem;
 }
