@@ -35,8 +35,8 @@ struct String : StringBase {
 };
 constexpr int FONT_INFO=1,FONT_LABEL=2,FONT_BODY=4,FONT_TITLE=6,FONT_HUGE=7,DISPLAY_HEIGHT=240;
 struct Canvas {
- int clearHeight=0;
- void fillRect(int,int,int,int h,uint16_t){clearHeight=h;}
+ int clearHeight=0,clearCalls=0;
+ void fillRect(int,int,int,int h,uint16_t){clearHeight=h;++clearCalls;}
  int textWidth(const String &s,int font){return s.length()*(font==6 ? 27 : font==7 ? 32 : font==4 ? 16 : font==2 ? 8 : 6);}
  int currentFont=1,lastY=0,lastFont=0;String lastText;uint16_t lastColor=0;
  void setTextDatum(int){} void setTextFont(int font){currentFont=font;}
@@ -82,6 +82,23 @@ using std::max;
 code = code.replace(" using StringBase::StringBase;", " using StringBase::StringBase;\n String(uint32_t n){assign(std::to_string(n));}")
 code = code.replace(" void setTextDatum(int)", " void fillRoundRect(int,int,int,int,int,uint16_t){}\n void setTextDatum(int)")
 code += function("drawHomeAssistantCard") + "\n"
+code += r'''
+bool bufferAvailable=true;
+bool ensureClockDynamicSprite(){return bufferAvailable;}
+struct Sprite : Canvas {
+ int pushes=0;uint16_t foreground=0,background=0;
+ void setBitmapColor(uint16_t f,uint16_t b){foreground=f;background=b;}
+ void fillSprite(int value){assert(value==0);}
+ bool pushSprite(int x,int y,int sx,int sy,int w,int h){
+  assert(sx==0 && sy==0 && w<=216 && h<=64);
+  assert(textWidth(lastText,lastFont)<=w && fontHeight(lastFont)<=h);
+  assert(lastColor==1);
+  ++pushes;tft.lastText=lastText;tft.lastFont=lastFont;tft.lastY=y;
+  tft.clearHeight=h;assert(x+w<=240 && y+h<=220);return true;
+ }
+} clockDynamicSprite;
+'''
+code += function("drawDynamicText") + "\n"
 code += function("updateWorldDynamicArea") + "\n"
 code += r'''
 int yields=0;
@@ -162,11 +179,24 @@ int main(){
  displayInvalidateImage("/images/test.jpg"); assert(invalidations==1);
  displayServiceTemporaryMessage(); assert(updates==0);
  expired=true; displayServiceTemporaryMessage(); assert(updates==1);
+ int clearCalls=tft.clearCalls;
  updateWorldDynamicArea();
+ assert(clockDynamicSprite.pushes==2 && tft.clearCalls==clearCalls);
+ assert(clockDynamicSprite.foreground==theme.text && clockDynamicSprite.background==theme.surface);
  assert(tft.lastY==142);
  assert(tft.textWidth(tft.lastText,tft.lastFont)<=118);
  assert(tft.fontHeight(tft.lastFont)<=tft.clearHeight);
  assert(tft.lastY+tft.clearHeight<=220);
+ bufferAvailable=false;updateWorldDynamicArea();
+ assert(tft.clearCalls==clearCalls+2 && tft.lastY==142);
+ assert(tft.fontHeight(tft.lastFont)<=tft.clearHeight);
+ const int dynamicFonts[]={FONT_HUGE,FONT_TITLE,FONT_BODY,FONT_INFO};
+ bufferAvailable=true;
+ drawDynamicText("in 24h 12m",24,100,192,48,TC_DATUM,dynamicFonts,4,theme.accent,theme.surface);
+ assert(clockDynamicSprite.lastFont==FONT_BODY);
+ assert(clockDynamicSprite.foreground==theme.accent);
+ drawDynamicText("00:59",20,106,200,48,TC_DATUM,dynamicFonts,4,theme.text,theme.surface);
+ assert(clockDynamicSprite.lastFont==FONT_HUGE);
 }
 '''
 with tempfile.TemporaryDirectory() as folder:

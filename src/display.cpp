@@ -1435,15 +1435,36 @@ void updateClockDynamicArea() {
     }
 }
 
+void drawDynamicText(const String &text, int x, int y, int width, int height,
+                     uint8_t datum, const int *fonts, size_t fontCount,
+                     uint16_t foreground, uint16_t background) {
+    int font = chooseCanvasFittingFont(tft, text, width, fonts, fontCount, height);
+    int textX = datum == TC_DATUM ? width / 2 : 0;
+    if (ensureClockDynamicSprite()) {
+        // Share the existing 1 bpp buffer; only push the text region, preserving nearby labels.
+        clockDynamicSprite.setBitmapColor(foreground, background);
+        clockDynamicSprite.fillSprite(0);
+        clockDynamicSprite.setTextDatum(datum);
+        clockDynamicSprite.setTextFont(font);
+        clockDynamicSprite.setTextColor(1, 0);
+        clockDynamicSprite.drawString(text, textX, 0, font);
+        clockDynamicSprite.pushSprite(x, y, 0, 0, width, height);
+    } else {
+        tft.fillRect(x, y, width, height, background);
+        tft.setTextDatum(datum);
+        tft.setTextFont(font);
+        tft.setTextColor(foreground, background);
+        tft.drawString(text, x + textX, y, font);
+    }
+}
+
 void updateFocusDynamicArea() {
     const ThemePalette &theme = activeTheme();
     int32_t remainingSeconds = dashboardFocusRemainingSeconds();
 
-    tft.fillRect(20, 92, 200, 112, theme.surface);
-    tft.setTextDatum(TC_DATUM);
-    tft.setTextFont(FONT_HUGE);
-    tft.setTextColor(theme.text, theme.surface);
-    tft.drawString(formatDuration(remainingSeconds), 120, 106, FONT_HUGE);
+    const int timeFonts[] = {FONT_HUGE, FONT_TITLE, FONT_BODY};
+    drawDynamicText(formatDuration(remainingSeconds), 20, 106, 200, 48, TC_DATUM,
+                    timeFonts, sizeof(timeFonts) / sizeof(timeFonts[0]), theme.text, theme.surface);
 
     int progressWidth = 184;
     int progressHeight = 8;
@@ -1462,9 +1483,6 @@ void updateFocusDynamicArea() {
         }
     }
 
-    tft.setTextFont(FONT_INFO);
-    tft.setTextColor(theme.muted, theme.surface);
-    tft.drawString("Duration " + String(dashboardData.focus.durationMinutes) + " min", 120, 196, FONT_INFO);
 }
 
 void updateWorldDynamicArea() {
@@ -1477,26 +1495,18 @@ void updateWorldDynamicArea() {
         }
 
         const int timeFonts[] = {FONT_TITLE, FONT_BODY, FONT_LABEL};
-        String timeText = formatWorldTime(clock.offsetSeconds);
-        int timeFont = chooseCanvasFittingFont(tft, timeText, 118, timeFonts,
-                                               sizeof(timeFonts) / sizeof(timeFonts[0]), 48);
-        tft.fillRect(20, y, 118, 48, theme.surface);
-        tft.setTextDatum(TL_DATUM);
-        tft.setTextFont(timeFont);
-        tft.setTextColor(theme.text, theme.surface);
-        tft.drawString(timeText, 20, y, timeFont);
+        drawDynamicText(formatWorldTime(clock.offsetSeconds), 20, y, 118, 48, TL_DATUM,
+                        timeFonts, sizeof(timeFonts) / sizeof(timeFonts[0]), theme.text, theme.surface);
         y += 72;
     }
 }
 
 void updateEventDynamicArea() {
     const ThemePalette &theme = activeTheme();
-    tft.fillRect(20, 96, 200, 52, theme.surface);
-    tft.setTextDatum(TC_DATUM);
     const int countdownFonts[] = {FONT_HUGE, FONT_TITLE, FONT_BODY, FONT_LABEL, FONT_INFO};
-    drawAdaptiveText(formatRelativeCountdown(dashboardEventRemainingSeconds()),
-                     120, 100, 192, TC_DATUM, countdownFonts,
-                     sizeof(countdownFonts) / sizeof(countdownFonts[0]), theme.accent, theme.surface);
+    drawDynamicText(formatRelativeCountdown(dashboardEventRemainingSeconds()),
+                    24, 100, 192, 48, TC_DATUM, countdownFonts,
+                    sizeof(countdownFonts) / sizeof(countdownFonts[0]), theme.accent, theme.surface);
 }
 
 void renderClockPage() {
@@ -1880,6 +1890,10 @@ void renderFocusPage() {
                    120, 76, FONT_INFO);
 
     updateFocusDynamicArea();
+    tft.setTextDatum(TC_DATUM);
+    tft.setTextFont(FONT_INFO);
+    tft.setTextColor(theme.muted, theme.surface);
+    tft.drawString("Duration " + String(dashboardData.focus.durationMinutes) + " min", 120, 196, FONT_INFO);
 }
 
 void renderWorldPage() {
