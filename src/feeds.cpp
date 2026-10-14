@@ -880,12 +880,7 @@ bool writeJsonToFile(const char *path, JsonDocument &doc) {
         return false;
     }
 
-    if (LittleFS.exists(path)) {
-        LittleFS.remove(path);
-    }
-
     if (!LittleFS.rename(tempPath, path)) {
-        LittleFS.remove(tempPath);
         return false;
     }
 

@@ -499,12 +499,7 @@ bool writeJsonToFile(const char *path, JsonDocument &doc) {
         return false;
     }
 
-    if (LittleFS.exists(path)) {
-        LittleFS.remove(path);
-    }
-
     if (!LittleFS.rename(tempPath, path)) {
-        LittleFS.remove(tempPath);
         return false;
     }
 
@@ -522,7 +517,7 @@ bool loadJsonFile(const char *path, TObject object) {
         JsonDocument doc;
         DeserializationError error = deserializeJson(doc, file);
         file.close();
-        if (error) {
+        if (error || !doc.is<JsonObject>()) {
             return false;
         }
 
@@ -543,7 +538,6 @@ bool loadJsonFile(const char *path, TObject object) {
         return false;
     }
 
-    LittleFS.remove(path);
     LittleFS.rename(tempPath, path);
     return true;
 }

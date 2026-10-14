@@ -129,20 +129,15 @@ bool writeAuthConfig() {
         return false;
     }
 
-    if (LittleFS.exists(AUTH_CONFIG_PATH)) {
-        LittleFS.remove(AUTH_CONFIG_PATH);
-    }
-
     if (!LittleFS.rename(tempPath, AUTH_CONFIG_PATH)) {
-        LittleFS.remove(tempPath);
         return false;
     }
 
     return true;
 }
 
-bool loadAuthConfig() {
-    File file = LittleFS.open(AUTH_CONFIG_PATH, "r");
+bool loadAuthConfigFile(const char *path) {
+    File file = LittleFS.open(path, "r");
     if (!file) {
         return false;
     }
@@ -159,26 +154,44 @@ bool loadAuthConfig() {
         return false;
     }
 
-    authConfig.version = AUTH_CONFIG_VERSION;
-    copyString(authConfig.passwordMd5, sizeof(authConfig.passwordMd5), doc["passwordMd5"] | "");
-    authConfig.provisionedPassword[0] = '\0';
+    AuthConfig candidate = {};
+    candidate.version = AUTH_CONFIG_VERSION;
+    const char *storedHash = doc["passwordMd5"] | "";
 
-    if (!passwordHashValid(authConfig.passwordMd5)) {
+    if (!passwordHashValid(storedHash)) {
         return false;
     }
+    copyString(candidate.passwordMd5, sizeof(candidate.passwordMd5), storedHash);
 
     if (storedVersion >= AUTH_CONFIG_VERSION) {
-        copyString(authConfig.provisionedPassword,
-                   sizeof(authConfig.provisionedPassword),
+        copyString(candidate.provisionedPassword,
+                   sizeof(candidate.provisionedPassword),
                    doc["provisionedPassword"] | "");
 
-        if (authConfig.provisionedPassword[0] != '\0' &&
-            (!passwordTextValid(authConfig.provisionedPassword) ||
-             !provisionedPasswordMatchesHash(authConfig.provisionedPassword, authConfig.passwordMd5))) {
-            authConfig.provisionedPassword[0] = '\0';
+        if (candidate.provisionedPassword[0] != '\0' &&
+            (!passwordTextValid(candidate.provisionedPassword) ||
+             !provisionedPasswordMatchesHash(candidate.provisionedPassword, candidate.passwordMd5))) {
+            candidate.provisionedPassword[0] = '\0';
         }
     }
 
+    authConfig = candidate;
+    return true;
+}
+
+bool loadAuthConfig() {
+    if (loadAuthConfigFile(AUTH_CONFIG_PATH)) {
+        return true;
+    }
+
+    char tempPath[40];
+    if (!buildTempPath(AUTH_CONFIG_PATH, tempPath, sizeof(tempPath)) ||
+        !loadAuthConfigFile(tempPath)) {
+        return false;
+    }
+
+    // Keep the validated temporary copy if committing it still fails.
+    LittleFS.rename(tempPath, AUTH_CONFIG_PATH);
     return true;
 }
 
