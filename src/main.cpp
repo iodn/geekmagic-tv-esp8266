@@ -42,7 +42,11 @@ constexpr uint32_t kOptionalServiceMinFreeHeapBytes = 8000UL;
 constexpr uint32_t kOptionalServiceRetryLogMs = 5000UL;
 
 void logHeapState(const char *stage) {
-    logPrintf(F("Free heap after %s: %u"), stage, ESP.getFreeHeap());
+    uint32_t freeHeap = 0;
+    uint32_t largestBlock = 0;
+    uint8_t fragmentation = 0;
+    ESP.getHeapStats(&freeHeap, &largestBlock, &fragmentation);
+    logPrintf(F("Heap %s: free=%u max=%u frag=%u%%"), stage, freeHeap, largestBlock, fragmentation);
 }
 
 void logOptionalServiceDelay(const char *serviceName, uint32_t freeHeap) {
