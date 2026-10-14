@@ -96,14 +96,13 @@ bool provisionedPasswordMatchesHash(const char *password, const char *hash) {
     return candidateHash.equalsConstantTime(String(hash));
 }
 
-bool writeAuthConfig() {
+bool writeAuthConfig(const AuthConfig &config) {
     JsonDocument doc;
-    doc["version"] = authConfig.version;
-    doc["passwordMd5"] = authConfig.passwordMd5;
-    if (authConfig.provisionedPassword[0] != '\0') {
-        doc["provisionedPassword"] = authConfig.provisionedPassword;
+    doc["version"] = config.version;
+    doc["passwordMd5"] = config.passwordMd5;
+    if (config.provisionedPassword[0] != '\0') {
+        doc["provisionedPassword"] = config.provisionedPassword;
     }
-
     if (doc.overflowed()) {
         return false;
     }
@@ -216,7 +215,7 @@ bool provisionFreshPassword() {
     copyString(authConfig.provisionedPassword, sizeof(authConfig.provisionedPassword), password.c_str());
     copyString(authConfig.passwordMd5, sizeof(authConfig.passwordMd5), computePasswordMd5(password).c_str());
     provisionedThisBoot = true;
-    return writeAuthConfig();
+    return writeAuthConfig(authConfig);
 }
 
 }  // namespace
@@ -274,16 +273,18 @@ bool authUpdatePassword(const String &currentPassword, const String &newPassword
         return false;
     }
 
-    authConfig.version = AUTH_CONFIG_VERSION;
-    copyString(authConfig.passwordMd5, sizeof(authConfig.passwordMd5), computePasswordMd5(newPassword).c_str());
-    authConfig.provisionedPassword[0] = '\0';
-    if (!writeAuthConfig()) {
+    AuthConfig candidate = authConfig;
+    candidate.version = AUTH_CONFIG_VERSION;
+    copyString(candidate.passwordMd5, sizeof(candidate.passwordMd5), computePasswordMd5(newPassword).c_str());
+    candidate.provisionedPassword[0] = '\0';
+    if (!writeAuthConfig(candidate)) {
         if (error != nullptr) {
             *error = "Failed to save password";
         }
         return false;
     }
 
+    authConfig = candidate;
     provisionedThisBoot = false;
     if (error != nullptr) {
         *error = "";
