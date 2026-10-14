@@ -1552,7 +1552,7 @@ bool syncHomeAssistantSlot(uint8_t index, String *error) {
     JsonObjectConst attributes = doc["attributes"].as<JsonObjectConst>();
     String entityId = trimStringCopy(doc["entity_id"] | slot.entityId);
     String rawState = trimStringCopy(doc["state"] | "");
-    if (entityId.length() == 0 || rawState.length() == 0) {
+    if (entityId.length() == 0 || !doc["state"].is<const char*>()) {
         if (error != nullptr) {
             *error = "Home Assistant payload incomplete";
         }
