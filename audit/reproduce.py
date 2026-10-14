@@ -20,6 +20,7 @@ for name in (
     'test-display-heap.py',
     'regression-dashboard.py',
     'feed-regressions.py',
+    'test-coingecko-stream.py',
     'test-tls-heap.py',
     'test-http-heap.py',
     'test-tls-client.py',

@@ -12,6 +12,7 @@
 #include <lwip/tcp.h>
 #include <include/ClientContext.h>
 #include <limits.h>
+#include <functional>
 #include <math.h>
 #include <umm_malloc/umm_heap_select.h>
 
@@ -1004,7 +1005,8 @@ bool httpGetJson(const String &url,
                  JsonDocument &doc,
                  String *error,
                  JsonDocument *filter = nullptr,
-                 const HttpJsonRequestOptions *options = nullptr) {
+                 const HttpJsonRequestOptions *options = nullptr,
+                 const std::function<DeserializationError(Stream &, JsonDocument &)> &readJson = {}) {
     if (feedJobsCancelled) {
         if (error) *error = F("Feed job cancelled");
         return false;
@@ -1063,7 +1065,7 @@ bool httpGetJson(const String &url,
         doc.clear();
         FeedJsonStream body(http.getStream());
         DeserializationError jsonError =
-            filter == nullptr
+            readJson ? readJson(body, doc) : filter == nullptr
                 ? deserializeJson(doc, body)
                 : deserializeJson(doc,
                                   body,
@@ -1259,6 +1261,64 @@ int coinGeckoCandidateScore(const String &input, JsonObjectConst coin) {
     return 0;
 }
 
+// Search results can contain hundreds of assets. Keep only one candidate and
+// the best match while streaming instead of retaining the complete coins array.
+DeserializationError readCoinGeckoSearch(Stream &stream, JsonDocument &best, const String &query) {
+    if (!stream.find("\"coins\"")) return DeserializationError::IncompleteInput;
+    auto nextToken = [&]() {
+        char value;
+        while (stream.readBytes(&value, 1) == 1) {
+            if (!isspace(static_cast<unsigned char>(value))) return static_cast<int>(value);
+        }
+        return -1;
+    };
+    if (nextToken() != ':' || nextToken() != '[') return DeserializationError::InvalidInput;
+    JsonDocument filter;
+    buildCoinGeckoSearchFilter(filter);
+    JsonDocument candidate;
+    int bestScore = -1;
+    int bestRank = INT_MAX;
+    int token = nextToken();
+    while (token != ']') {
+        if (token != '{') return DeserializationError::InvalidInput;
+        // The opening brace was consumed while checking the array delimiter.
+        struct CandidateStream : Stream {
+            Stream &source;
+            bool opening = true;
+            explicit CandidateStream(Stream &input) : source(input) {}
+            int available() override { return opening ? 1 : source.available(); }
+            int peek() override { return opening ? '{' : source.peek(); }
+            int read() override { if (opening) { opening = false; return '{'; } return source.read(); }
+            size_t readBytes(char *buffer, size_t length) override {
+                if (!length) return 0;
+                size_t count = 0;
+                if (opening) { buffer[count++] = '{'; opening = false; }
+                return count + source.readBytes(buffer + count, length - count);
+            }
+            size_t write(uint8_t) override { return 0; }
+        } input(stream);
+        DeserializationError result = deserializeJson(candidate, input,
+            DeserializationOption::Filter(filter["coins"][0].as<JsonVariantConst>()));
+        if (result) return result;
+        JsonObjectConst coin = candidate.as<JsonObjectConst>();
+        int score = coinGeckoCandidateScore(query, coin);
+        int rank = coin["market_cap_rank"].isNull() ? INT_MAX : coin["market_cap_rank"].as<int>();
+        if (score > bestScore || (score == bestScore && rank < bestRank)) {
+            best.set(coin);
+            if (best.overflowed()) return DeserializationError::NoMemory;
+            bestScore = score;
+            bestRank = rank;
+        }
+        token = nextToken();
+        if (token == ',') {
+            token = nextToken();
+            if (token != '{') return DeserializationError::InvalidInput;
+        }
+        else if (token != ']') return DeserializationError::InvalidInput;
+    }
+    return DeserializationError::Ok;
+}
+
 bool resolveCoinGeckoAsset(const String &query,
                            String &resolvedId,
                            String &resolvedName,
@@ -1274,41 +1334,14 @@ bool resolveCoinGeckoAsset(const String &query,
     JsonDocument doc;
     String requestError;
     String url = "https://api.coingecko.com/api/v3/search?query=" + urlEncode(normalizedQuery);
-    JsonDocument filter;
-    buildCoinGeckoSearchFilter(filter);
-    if (!httpGetJson(url, doc, &requestError, &filter)) {
-        if (error != nullptr) {
-            *error = requestError;
-        }
+    auto readSearch = [&](Stream &stream, JsonDocument &result) {
+        return readCoinGeckoSearch(stream, result, normalizedQuery);
+    };
+    if (!httpGetJson(url, doc, &requestError, nullptr, nullptr, readSearch)) {
+        if (error != nullptr) *error = requestError;
         return false;
     }
-
-    JsonArrayConst coins = doc["coins"].as<JsonArrayConst>();
-    if (coins.isNull() || coins.size() == 0) {
-        if (error != nullptr) {
-            *error = F("CoinGecko returned no match");
-        }
-        return false;
-    }
-
-    JsonObjectConst bestCoin;
-    int bestScore = -1;
-    int bestRank = INT_MAX;
-
-    for (JsonObjectConst coin : coins) {
-        int score = coinGeckoCandidateScore(normalizedQuery, coin);
-        int rank = coin["market_cap_rank"].isNull() ? INT_MAX : coin["market_cap_rank"].as<int>();
-        if (score > bestScore || (score == bestScore && rank < bestRank)) {
-            bestCoin = coin;
-            bestScore = score;
-            bestRank = rank;
-        }
-    }
-
-    if (bestCoin.isNull()) {
-        bestCoin = coins[0].as<JsonObjectConst>();
-    }
-
+    JsonObjectConst bestCoin = doc.as<JsonObjectConst>();
     resolvedId = bestCoin["id"].isNull() ? String("") : normalizeCoinGeckoLookupValue(bestCoin["id"].as<const char*>());
     resolvedName = bestCoin["name"].isNull() ? String("") : String(bestCoin["name"].as<const char*>());
 
