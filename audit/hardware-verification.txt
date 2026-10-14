@@ -27,7 +27,7 @@ and shares its TLS context. Cancellation accesses only the owned context's TCP
 socket, preserving TLS state while the cooperative feed worker is suspended.
 The temporary connect override was removed by this fix.
 
-Final flashed build
+Initial successful HTTPS build (historical)
 
 Source: 6dc58a7 (subsequent report-only changes do not alter firmware).
 pio run: PASS. Static RAM: 50,752 / 81,920 bytes (62.0%).
@@ -37,7 +37,7 @@ Binary SHA256:
 Private flash log: write-tls-clone.log; private boot log: tls-clone-boot.log
 Both are under /home/intra/.local/state/geekmagic-backups/.
 
-Observed final firmware behavior
+Observed initial successful HTTPS build behavior
 
 * Settings CRC validation, LittleFS and saved authentication initialization pass.
 * Station WiFi connects using saved credentials at 192.168.16.218.
@@ -73,3 +73,60 @@ needed for flicker, readability and clipping. The successful boot and feed
 capture does not establish long-term radio stability or prove every AP compatible.
 The saved AP works with this device; this alone does not diagnose the reporter's
 WiFi issue. No changes have been pushed to GitHub.
+
+Cancellation follow-up
+
+28da2ee fixes ordinary HTTP cancellation: HTTPClient owns a cloned WiFiClient,
+so aborting the original disconnected client leaves the request running.
+FeedHttpClient exposes its actual transport before connecting; the active guard
+now tracks that clone for both protocols.
+03e4a9a avoids WiFiClient::abort() on the main loop: the pinned core calls flush()
+before TCP abort, potentially waiting for unacknowledged output. The shared socket
+access helper calls ClientContext::abort() directly for HTTP and HTTPS, retaining
+the suspended worker and TLS engine until their normal unwind.
+
+The actual client regression reproduces a cloned HTTP connection, proves that
+aborting the original fails to cancel it, and verifies direct cancellation of
+the clone without flushing. Disconnected/null clients are checked as well.
+Feed-worker regression checks still cover yielding, deadlines and cancellation.
+All 18 aggregate host suites pass after the changes.
+
+A temporary diagnostic build reduced the request deadline to 1 ms without
+changing saved configuration. Native serial capture observed failed HTTP and
+HTTPS requests, successful service startup and boot stability, and reclaimed
+DRAM between requests (15,080 bytes before successive TLS attempts). This
+capture ended while a later request remained pending; it does not establish
+immediate cancellation of DNS/TCP connection waits or a complete fault-test run.
+Reopening the serial port for a follow-up also reset the TV, so that capture
+was not continuous. The diagnostic is intentionally not committed. Normal
+24,000 ms deadline source was restored before building the release image.
+
+Cancellation release source: 03e4a9a. Build: PASS. RAM: 50,752 bytes (62.0%).
+Flash: 736,763 bytes (70.5%). Binary: 740,912 bytes.
+SHA256: 2c065aaeb77fad89adeb527705ba4a23c9167c11ae4b02d513b78d6401403104
+
+Cancellation lifetime correction
+
+9d8152e corrects a lifetime hazard introduced while tracking the cloned socket:
+HTTPClient::end() can delete that clone before the active guard unwinds.
+The guard now holds the still-live FeedHttpClient request object; cancellation
+fetches its current transport each time and handles the null state after end().
+The regression exercises cancellation after response cleanup, and all aggregate
+checks pass. This avoids retaining a freed socket pointer across SDK yields.
+
+Latest normal release source: 9d8152e. Deadline: 24,000 ms.
+Build: PASS. Static RAM: 50,752 bytes (62.0%). Flash: 736,763 bytes (70.5%).
+Binary: 740,912 bytes. SHA256:
+167086eef6be7ced9d8009da4935ab29581f470ae557bd347f6a6e30d5257f39
+
+Latest flashed-image verification
+
+write-http-lifetime.log: 740,912 bytes written; esptool hash verification passes.
+http-lifetime-boot.log: saved settings load, WiFi connects, time/mDNS/OTA start,
+216x64 clock sprite allocates, weather and BTC/MSFT/NVDA HTTPS feeds all succeed.
+Clock sprite is restored after TLS. Boot stability passes with DRAM free 18,552
+bytes, largest block 17,656 bytes, fragmentation 5%; IRAM free/largest 18,824.
+No exception or watchdog reset appears during the 85-second capture.
+Both logs are private under /home/intra/.local/state/geekmagic-backups/.
+Network reachability was rechecked with proxies bypassed and still fails.
+Physical flicker and authenticated web API/mixed-request checks remain unverified.

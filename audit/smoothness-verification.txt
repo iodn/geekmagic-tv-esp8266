@@ -157,3 +157,11 @@ pass. The user subsequently plugged in the TV and granted standing flash approva
 A verified private 4 MB backup preceded application-only firmware updates.
 See hardware-verification.txt for current measurements, the TLS clone bug found
 on-device, regression results and the remaining network/screen limitations.
+
+Additional cancellation fixes: 28da2ee tracks HTTPClient's actual clone; 03e4a9a
+closes TCP directly without a main-loop flush; 9d8152e retrieves the current
+transport from the live HTTP request, safely handling response cleanup.
+All 18 host suites pass. The final normal-deadline image is flashed and native
+weather/all three market requests and boot stability pass. Hardware verification
+is recorded in hardware-verification.txt; the remaining screen and network-access
+checks above still apply. No claim of physical flicker elimination is made.
