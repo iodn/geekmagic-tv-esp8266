@@ -2,19 +2,32 @@
 // PLAYWRIGHT_MODULE_PATH may point to a Playwright installation outside this repository.
 const fs = require('fs');
 const path = require('path');
+const http = require('http');
 const assert = require('assert').strict;
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE_PATH || 'playwright');
 const source = fs.readFileSync(path.join(__dirname, '../src/webui.h'), 'utf8');
-const html = source.match(/const char index_html\[\] PROGMEM = R"rawliteral\(([\s\S]*?)\)rawliteral";/)[1];
 (async () => {
     const browser = await chromium.launch({headless: true, executablePath: process.env.BROWSER_EXECUTABLE});
+    let fixtureServer;
     try {
         const page = await browser.newPage();
         const errors = [];
         page.on('pageerror', error => errors.push(error.message));
-        await page.route('http://device.test/**', async route => {
-            const endpoint = new URL(route.request().url()).pathname;
-            if (endpoint === '/') return route.fulfill({contentType: 'text/html', body: html});
+        const server = http.createServer((request, response) => {
+            const endpoint = new URL(request.url, 'http://localhost').pathname;
+            if (endpoint === '/' || endpoint === '/update') {
+                const name=endpoint === '/' ? 'index_html' : 'ota_html';
+                let body=Buffer.from(source.match(new RegExp('const char '+name+'\\[\\] PROGMEM = R"rawliteral\\(([\\s\\S]*?)\\)rawliteral";'))[1]);
+                if (process.env.WEB_ASSET_HEADER) {
+                    const header=fs.readFileSync(process.env.WEB_ASSET_HEADER,'utf8');
+                    const array=header.match(new RegExp(name+'_gzip\\[\\] PROGMEM = \\{([\\s\\S]*?)\\};'))[1];
+                    body=Buffer.from(Array.from(array.matchAll(/0x([0-9a-f]{2})/g),match=>parseInt(match[1],16)));
+                    response.setHeader('Content-Encoding','gzip');
+                }
+                response.setHeader('Content-Type','text/html');
+                response.setHeader('Content-Length',body.length);
+                return response.end(body);
+            }
             const fixtures = {
                 '/auth/status': {authenticated: false, canRevealPassword: true, deviceName: 'Test TV', hostName: 'test-tv'},
                 '/app.json': {deviceName: 'LivingRoomClockWithALongNameHere', hostName: 'livingroomclockwithalongnamehere', brt: 70},
@@ -23,11 +36,23 @@ const html = source.match(/const char index_html\[\] PROGMEM = R"rawliteral\(([\
                 '/version.json': {version: 'test'},
                 '/space.json': {total: 1024, free: 512}
             };
-            await route.fulfill({contentType: 'application/json', body: JSON.stringify(fixtures[endpoint] || {})});
+            response.setHeader('Content-Type','application/json');
+            response.end(JSON.stringify(fixtures[endpoint] || {}));
         });
-        await page.goto('http://device.test/');
+        await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+        fixtureServer=server;
+        const origin=`http://127.0.0.1:${server.address().port}`;
+        const mainResponse=await page.goto(origin+'/');
+        if(process.env.WEB_ASSET_HEADER) assert.equal(mainResponse.headers()['content-encoding'],'gzip');
         await page.waitForFunction(() => document.getElementById('authHint').textContent.includes('password'));
         assert(await page.locator('#appRoot').evaluate(element => element.inert));
+        await page.setViewportSize({width:375,height:320});
+        for (const id of ['authPassword','authRevealButton']) {
+            await page.locator('#'+id).scrollIntoViewIfNeeded();
+            const box=await page.locator('#'+id).boundingBox();
+            assert(box.y>=0 && box.y+box.height<=320, `Login control ${id} is clipped in landscape`);
+        }
+        await page.setViewportSize({width:1280,height:900});
         await page.locator('#authPassword').focus();
         await page.keyboard.press('Shift+Tab');
         assert.equal(await page.evaluate(() => document.activeElement.id), 'authRevealButton');
@@ -58,9 +83,18 @@ const html = source.match(/const char index_html\[\] PROGMEM = R"rawliteral\(([\
                 await page.screenshot({path:path.join(process.env.AUDIT_SCREENSHOT_DIR, `dashboard-${width}.png`),fullPage:true});
             }
         }
+        const otaResponse=await page.goto(origin+'/update');
+        if(process.env.WEB_ASSET_HEADER) assert.equal(otaResponse.headers()['content-encoding'],'gzip');
+        assert.equal(await page.locator('input[type="file"]').count(),1);
+        for (const width of [320,375,1280]) {
+            await page.setViewportSize({width,height:900});
+            const sizes=await page.evaluate(()=>({scroll:document.documentElement.scrollWidth,client:document.documentElement.clientWidth}));
+            assert(sizes.scroll<=sizes.client,`OTA page overflows at ${width}px`);
+        }
         assert.deepEqual(errors, [], 'Embedded UI has no browser errors');
         console.log('Browser UI checks passed: login focus, inert background, chip focus, all six tabs at 320/375/1280px');
     } finally {
         await browser.close();
+        if(fixtureServer) await new Promise(resolve=>fixtureServer.close(resolve));
     }
 })().catch(error => {console.error(error); process.exitCode = 1;});

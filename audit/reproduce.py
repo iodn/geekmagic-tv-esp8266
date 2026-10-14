@@ -11,6 +11,7 @@ root = Path(__file__).resolve().parents[1]
 for name in (
     'test-auth.py',
     'test-settings.py',
+    'test-web-assets.py',
     'test-display.py',
     'test-display-heap.py',
     'test-upload.py',

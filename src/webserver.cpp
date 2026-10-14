@@ -7,7 +7,7 @@
 #include "auth.h"
 #include "logger.h"
 #include "settings.h"
-#include "webui.h"
+#include "webui_gzip.h"
 #include <ArduinoJson.h>
 #include <ESP8266WebServer.h>
 #include <ESP8266WiFi.h>
@@ -1262,7 +1262,8 @@ void handleFactoryReset() {
 
 void handleOTAForm() {
     prepareNoStoreHeaders();
-    server.send_P(200, "text/html", ota_html);
+    server.sendHeader("Content-Encoding", "gzip");
+    server.send_P(200, PSTR("text/html"), reinterpret_cast<PGM_P>(ota_html_gzip), sizeof(ota_html_gzip));
 }
 
 void handleOTAUpload() {
@@ -1401,7 +1402,8 @@ void handleRoot() {
     }
 
     prepareNoStoreHeaders();
-    server.send_P(200, "text/html", index_html);
+    server.sendHeader("Content-Encoding", "gzip");
+    server.send_P(200, PSTR("text/html"), reinterpret_cast<PGM_P>(index_html_gzip), sizeof(index_html_gzip));
 }
 
 void webserverInit() {
