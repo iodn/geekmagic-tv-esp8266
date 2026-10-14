@@ -1001,7 +1001,9 @@ bool httpGetJson(const String &url,
         if (responseCode != HTTP_CODE_OK) {
             String httpError = responseCode < 0 ? HTTPClient::errorToString(responseCode) : "";
             if (error != nullptr) {
-                *error = responseCode < 0
+                if (feedJobsCancelled) *error = F("Feed job cancelled");
+                else if (activeRequestExpired) *error = F("Request deadline exceeded");
+                else *error = responseCode < 0
                              ? ("HTTP " + String(responseCode) + " " + httpError)
                              : ("HTTP " + String(responseCode));
             }
@@ -1018,7 +1020,7 @@ bool httpGetJson(const String &url,
                 char tlsMessage[80] = {};
                 int tlsError = activeTlsClient->getLastSSLError(tlsMessage, sizeof(tlsMessage));
                 logPrintf(F("TLS error: %d %s"), tlsError, tlsMessage);
-                if (tlsError != 0 && error != nullptr) {
+                if (tlsError != 0 && error != nullptr && !feedJobsCancelled && !activeRequestExpired) {
                     *error = String(F("TLS ")) + String(tlsError) + " " + tlsMessage;
                 }
             }

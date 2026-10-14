@@ -22,6 +22,7 @@ for name in (
     'feed-regressions.py',
     'test-tls-heap.py',
     'test-tls-client.py',
+    'test-feed-errors.py',
     'regression-network.py',
     'regression-webserver.py',
     'test-api-script.py',
