@@ -495,19 +495,6 @@ The build compresses the editable pages in `src/webui.h` into generated gzip
 assets. Dashboard and OTA responses include `Content-Encoding: gzip`; use
 `curl --compressed` when inspecting their HTML from a terminal.
 
-Browser checks require Playwright and its Chromium browser. They serve local
-fixtures and do not contact a TV:
-
-```bash
-node audit/browser-ui.cjs
-WEB_ASSET_HEADER=.pio/build/nodemcuv2/generated/webui_gzip.h node audit/browser-ui.cjs
-```
-
-`PLAYWRIGHT_MODULE_PATH` can point to an external Playwright installation, and
-`BROWSER_EXECUTABLE` can select an existing Chromium executable.
-
-These checks use current source functions, network/filesystem mocks, and the real JPEG decoder. They do not contact a device. For authenticated API checks on a device with no existing display draft:
-
 ```bash
 SMARTCLOCK_PASSWORD='YOUR_ADMIN_PASSWORD' ./test-api.sh <device-ip>
 ```
