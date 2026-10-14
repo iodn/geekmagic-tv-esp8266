@@ -164,8 +164,8 @@ void monitorWiFi() {
             setupDns.stop();
             setupApStarted = false;
             WiFi.mode(WIFI_STA);
-            displayState.apMode = false;
-            displayBlankScreen();
+            snprintf(displayState.ipInfo, sizeof(displayState.ipInfo), "%s", WiFi.localIP().toString().c_str());
+            displayShowDashboard();
             logPrintf(F("WiFi connected: %s"), WiFi.localIP().toString().c_str());
         }
         return;

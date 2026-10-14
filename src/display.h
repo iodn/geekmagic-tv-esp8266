@@ -39,7 +39,7 @@ void displayServiceTemporaryMessage();
 void displayShowMessage(const String &msg);
 void displayShowTemporaryMessage(const String &msg, uint32_t durationMs);
 void displayShowAPScreen(const char* ssid, const char* password, const char* ip);
-void displayBlankScreen();
+void displayShowDashboard();
 void displayCycleNextPage(bool smoothTransition = false);
 void displayToggleBacklight();
 

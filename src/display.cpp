@@ -2487,11 +2487,12 @@ void displayRenderAPMode() {
                             2);
 }
 
-void displayBlankScreen() {
+void displayShowDashboard() {
     clearTemporaryMessage();
-    tft.fillScreen(TFT_BLACK);
+    displayState.apMode = false;
+    displayState.showImage = false;
     invalidateRenderCache();
-    logPrint(F("Display blanked to black."));
+    displayUpdate();
 }
 
 void displayInvalidateImage(const char *path) {

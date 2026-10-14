@@ -44,7 +44,7 @@ struct Canvas {
  void drawString(const String &text,int,int y,int font){lastY=y;lastFont=font;lastText=text;}
  int fontHeight(int font){return font==6 ? 48 : font==7 ? 48 : font==4 ? 26 : font==2 ? 16 : 8;}
 } tft;
-struct {char imagePath[64];} displayState;
+struct {char imagePath[64];bool apMode=true,showImage=true;} displayState;
 int invalidations=0,updates=0;
 void invalidateRenderCache(){++invalidations;}
 bool expired=false;
@@ -135,6 +135,8 @@ void displayApplyBrightness(int level){appliedBrightness=level;backlightOn=level
 void logPrintf(const char*,...){}void logPrint(const char*){}
 '''
 code += function("displayToggleBacklight") + "\n"
+code += "int clearedMessages=0;void clearTemporaryMessage(){++clearedMessages;}\n"
+code += function("displayShowDashboard") + "\n"
 code += function("focusProgressWidth") + "\n"
 code += function("formatDuration") + "\n"
 code += r'''
@@ -206,6 +208,8 @@ int main(){
  displayInvalidateImage("/images/test.jpg"); assert(invalidations==1);
  displayServiceTemporaryMessage(); assert(updates==0);
  expired=true; displayServiceTemporaryMessage(); assert(updates==1);
+ displayShowDashboard();assert(!displayState.apMode && !displayState.showImage);
+ assert(clearedMessages==1 && updates==2 && invalidations==2);
  int clearCalls=tft.clearCalls;
  updateWorldDynamicArea();
  assert(clockDynamicSprite.pushes==2 && tft.clearCalls==clearCalls);

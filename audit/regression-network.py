@@ -37,13 +37,13 @@ struct {
  int status(){return stationStatus;}IPAddress localIP(){return ip;}IPAddress softAPIP(){return IPAddress(192,168,4,1);}
 } WiFi;
 struct {int starts=0,stops=0;bool active=false;void start(int port,const char*domain,IPAddress){assert(port==53);assert(std::string(domain)=="*");++starts;active=true;}void stop(){++stops;active=false;}} setupDns;
-struct {bool apMode=false,showImage=false;} displayState;
+struct {bool apMode=false,showImage=false;char ipInfo[24]={};} displayState;
 struct {char deviceName[32]="clock";} appSettings;
 void settingsBuildHostname(const char*name,char*buffer,size_t n){snprintf(buffer,n,"%s",name);}
 void displayShowAPScreen(const char*,const char*,const char*){displayState.apMode=true;}
 using __FlashStringHelper=char;
 void displayShowMessage(const String&){}void logPrint(const String&){}
-void displayBlankScreen(){}void logPrintf(const char*,...){}void logHeapState(const char*){}void logOptionalServiceDelay(const char*,uint32_t){}
+int restoredDashboard=0;void displayShowDashboard(){++restoredDashboard;displayState.apMode=false;assert(std::string(displayState.ipInfo)=="192.168.1.5");}void logPrintf(const char*,...){}void logHeapState(const char*){}void logOptionalServiceDelay(const char*,uint32_t){}
 String generateRandomPassword(int){return "12345678";}
 struct {bool success=false;int beginCalls=0,endCalls=0;bool begin(const char*){++beginCalls;return success;}void end(){++endCalls;}void addService(const char*,const char*,int){}void addServiceTxt(const char*,const char*,const char*,const char*){}} MDNS;
 struct {void println(const char*){}void printf(const char*,...){}} Serial;
@@ -76,7 +76,7 @@ int main(){
  now++;monitorWiFi();assert(!wifiReconnectActive);assert(WiFi.ap);assert(WiFi.ssid=="saved-network");
  now=lastWiFiReconnectAttempt+WIFI_RECONNECT_INTERVAL-1;monitorWiFi();assert(WiFi.beginCalls==1);
  now++;monitorWiFi();assert(wifiReconnectActive);assert(WiFi.beginCalls==2);assert(WiFi.ap);
- WiFi.stationStatus=WL_CONNECTED;WiFi.ip=IPAddress(192,168,1,5);monitorWiFi();assert(!wifiFailsafeMode);assert(!wifiReconnectActive);assert(!WiFi.ap);assert(WiFi.modeValue==WIFI_STA);assert(!displayState.apMode);assert(setupDns.stops==1);assert(!setupDns.active);
+ WiFi.stationStatus=WL_CONNECTED;WiFi.ip=IPAddress(192,168,1,5);monitorWiFi();assert(!wifiFailsafeMode);assert(!wifiReconnectActive);assert(!WiFi.ap);assert(WiFi.modeValue==WIFI_STA);assert(!displayState.apMode);assert(setupDns.stops==1);assert(!setupDns.active);assert(restoredDashboard==1);
  ESP.heap=7000;int serviceStarts=MDNS.beginCalls;startDeferredNetworkServices();assert(MDNS.beginCalls==serviceStarts);
  ESP.heap=20000;
  MDNS.success=false;startDeferredNetworkServices();assert(!mdnsStarted);assert(MDNS.beginCalls==1);
