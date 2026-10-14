@@ -22,7 +22,7 @@ constexpr int WIFI_AP_STA=3,WIFI_STA=1,WL_CONNECTED=3;
 constexpr unsigned long WIFI_CONNECTION_TIMEOUT=30000UL,WIFI_RECONNECT_INTERVAL=300000UL;
 constexpr char WIFI_AP_NAME[]="SmartClock-Setup";
 constexpr int SETTINGS_HOSTNAME_LENGTH=32,WEB_SERVER_PORT=80;
-constexpr unsigned long kOptionalServiceWarmupMs=1500UL,kOptionalServiceMinFreeHeapBytes=28000UL;
+
 unsigned long now=100;
 unsigned long millis(){return now;}
 struct IPAddress {int value;IPAddress(int a,int b,int c,int d):value(a|b|c|d){}bool operator!=(const IPAddress&o)const{return value!=o.value;}String toString()const{return value?"192.168.1.5":"0.0.0.0";}};
@@ -57,6 +57,8 @@ unsigned long wifiReconnectStartedAt=0,lastApStartAttempt=0;
 void startTimeServices(){timeServicesStarted=true;}
 void setupOTA(){otaStarted=true;}
 '''
+for constant in ['kOptionalServiceWarmupMs','kOptionalServiceMinFreeHeapBytes']:
+    code+='\n'+re.search(r'constexpr uint32_t '+constant+r' = [^;]+;',source).group(0)
 web=(root/'src/webserver.cpp').read_text()
 code+='\n'+re.search(r'struct WiFiConnectTask \{[\s\S]*?\};',web).group(0)+'\nWiFiConnectTask wifiConnectTask{};\n'
 for constant in ['kWiFiConnectTimeoutMs','kWiFiIpWaitTimeoutMs']:
@@ -75,6 +77,8 @@ int main(){
  now=lastWiFiReconnectAttempt+WIFI_RECONNECT_INTERVAL-1;monitorWiFi();assert(WiFi.beginCalls==1);
  now++;monitorWiFi();assert(wifiReconnectActive);assert(WiFi.beginCalls==2);assert(WiFi.ap);
  WiFi.stationStatus=WL_CONNECTED;WiFi.ip=IPAddress(192,168,1,5);monitorWiFi();assert(!wifiFailsafeMode);assert(!wifiReconnectActive);assert(!WiFi.ap);assert(WiFi.modeValue==WIFI_STA);assert(!displayState.apMode);assert(setupDns.stops==1);assert(!setupDns.active);
+ ESP.heap=7000;int serviceStarts=MDNS.beginCalls;startDeferredNetworkServices();assert(MDNS.beginCalls==serviceStarts);
+ ESP.heap=20000;
  MDNS.success=false;startDeferredNetworkServices();assert(!mdnsStarted);assert(MDNS.beginCalls==1);
  now+=4999;startDeferredNetworkServices();assert(MDNS.beginCalls==1);assert(!otaStarted);
  now++;MDNS.success=true;startDeferredNetworkServices();assert(mdnsStarted);assert(MDNS.beginCalls==2);

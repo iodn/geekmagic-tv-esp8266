@@ -38,7 +38,7 @@ constexpr uint32_t kBootSuccessConfirmMs = 30000UL;
 constexpr uint32_t kClockSpriteWarmupMs = 8000UL;
 constexpr uint32_t kDisplayProfileCheckMs = 15000UL;
 constexpr uint32_t kOptionalServiceWarmupMs = 1500UL;
-constexpr uint32_t kOptionalServiceMinFreeHeapBytes = 28000UL;
+constexpr uint32_t kOptionalServiceMinFreeHeapBytes = 8000UL;
 constexpr uint32_t kOptionalServiceRetryLogMs = 5000UL;
 
 void logHeapState(const char *stage) {
