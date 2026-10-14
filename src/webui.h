@@ -2000,7 +2000,7 @@ function updateDeviceMeta() {
     const hostName = String(deviceIdentity.hostName || buildHostnameFromDeviceName(deviceName));
     const hostLabel = `${hostName}.local`;
 
-    document.getElementById("deviceMeta").textContent = `${deviceName} · ${hostLabel}`;
+    document.getElementById("deviceMeta").textContent = `${deviceName} · ${hostLabel}${deviceIdentity.rebootRequired ? " · Restart to apply new address" : ""}`;
     document.getElementById("authDeviceName").textContent = deviceName;
     document.getElementById("authDeviceHost").textContent = hostLabel;
 }
@@ -2013,6 +2013,7 @@ function setDeviceIdentity(payload = {}) {
     deviceIdentity.defaultDeviceName = nextDefaultDeviceName;
     deviceIdentity.deviceName = nextDeviceName;
     deviceIdentity.hostName = nextHostName;
+    deviceIdentity.rebootRequired = Boolean(payload.rebootRequired);
     updateDeviceMeta();
     updateDeviceIdentityPreview();
 }
@@ -3014,11 +3015,8 @@ async function commitState() {
             throw new Error(await response.text());
         }
 
-        setDeviceIdentity({
-            deviceName: document.getElementById("deviceName").value.trim(),
-            defaultDeviceName: deviceIdentity.defaultDeviceName,
-            hostName: buildHostnameFromDeviceName(document.getElementById("deviceName").value.trim())
-        });
+        const appResponse = await request("/app.json");
+        if (appResponse.ok) setDeviceIdentity(await appResponse.json());
         widgetBaseline = snapshot;
         dirty = false;
         updateActionButtons();

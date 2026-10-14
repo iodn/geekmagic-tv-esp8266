@@ -92,6 +92,16 @@ void copyConfiguredHostname(char *buffer, size_t bufferSize) {
     settingsBuildHostname(appSettings.deviceName, buffer, bufferSize);
 }
 
+void copyActiveHostname(char *buffer, size_t bufferSize) {
+    copyString(buffer, bufferSize, WiFi.hostname().c_str());
+}
+
+bool hostnameRestartRequired() {
+    char hostname[SETTINGS_HOSTNAME_LENGTH];
+    copyConfiguredHostname(hostname, sizeof(hostname));
+    return WiFi.hostname() != hostname;
+}
+
 void copyDefaultDeviceName(char *buffer, size_t bufferSize) {
     settingsDefaultDeviceName(buffer, bufferSize);
 }
@@ -608,13 +618,17 @@ void webserverApplyEffectiveBrightness(bool syncPreference) {
 void handleAppJson() {
     char hostName[SETTINGS_HOSTNAME_LENGTH];
     char defaultDeviceName[SETTINGS_DEVICE_NAME_LENGTH];
-    copyConfiguredHostname(hostName, sizeof(hostName));
+    copyActiveHostname(hostName, sizeof(hostName));
     copyDefaultDeviceName(defaultDeviceName, sizeof(defaultDeviceName));
 
     String json = "{";
     json += "\"deviceName\":\"" + String(appSettings.deviceName) + "\",";
     json += "\"defaultDeviceName\":\"" + String(defaultDeviceName) + "\",";
     json += "\"hostName\":\"" + String(hostName) + "\",";
+    char configuredHostName[SETTINGS_HOSTNAME_LENGTH];
+    copyConfiguredHostname(configuredHostName, sizeof(configuredHostName));
+    json += "\"configuredHostName\":\"" + String(configuredHostName) + "\",";
+    json += "\"rebootRequired\":" + String(hostnameRestartRequired() ? "true" : "false") + ",";
     json += "\"theme\":" + String(currentTheme) + ",";
     json += "\"brt\":" + String(currentBrightness) + ",";
     json += "\"img\":\"" + String(currentImage) + "\",";
@@ -654,7 +668,7 @@ void handleBrtJson() {
 
 void handleVersionJson() {
     char hostName[SETTINGS_HOSTNAME_LENGTH];
-    copyConfiguredHostname(hostName, sizeof(hostName));
+    copyActiveHostname(hostName, sizeof(hostName));
 
     String json = "{";
     json += "\"version\":\"" + String(FIRMWARE_VERSION_STRING) + "\",";
@@ -667,7 +681,7 @@ void handleVersionJson() {
 void handleAuthStatus() {
     char hostName[SETTINGS_HOSTNAME_LENGTH];
     char defaultDeviceName[SETTINGS_DEVICE_NAME_LENGTH];
-    copyConfiguredHostname(hostName, sizeof(hostName));
+    copyActiveHostname(hostName, sizeof(hostName));
     copyDefaultDeviceName(defaultDeviceName, sizeof(defaultDeviceName));
 
     bool authenticated = requestHasValidSession();

@@ -427,7 +427,7 @@ void monitorWiFi() {
 
 void setupMDNS() {
     char hostname[SETTINGS_HOSTNAME_LENGTH];
-    copyConfiguredHostname(hostname, sizeof(hostname));
+    snprintf(hostname, sizeof(hostname), "%s", WiFi.hostname().c_str());
 
     if (!MDNS.begin(hostname)) {
         Serial.println(F("mDNS failed"));
@@ -445,7 +445,7 @@ void setupMDNS() {
 
 void setupOTA() {
     char hostname[SETTINGS_HOSTNAME_LENGTH];
-    copyConfiguredHostname(hostname, sizeof(hostname));
+    snprintf(hostname, sizeof(hostname), "%s", WiFi.hostname().c_str());
 
     ArduinoOTA.setHostname(hostname);
     ArduinoOTA.setPasswordHash(authOtaPasswordHash());
