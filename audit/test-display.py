@@ -74,7 +74,7 @@ void drawAdaptiveText(const String &text,int,int,int,uint8_t,const int *,size_t,
 void drawAdaptiveBadge(int,int,int,int,const String &,const int *,size_t,uint16_t,uint16_t){}
 struct WorldClockData {bool enabled=true;char label[16]="Tokyo";long offsetSeconds=0;};
 constexpr int DASHBOARD_WORLD_CLOCK_COUNT=2;
-struct {WorldClockData worldClocks[2];} dashboardData;
+struct {WorldClockData worldClocks[2];struct {uint32_t durationMinutes=25;} focus;} dashboardData;
 String formatWorldTime(long){return "23:59";}
 using std::max;
 '''
@@ -126,8 +126,16 @@ struct Decoder {
 } TJpgDec;
 '''
 code += function("displayValidateImage") + "\n"
-progress = re.search(r"uint32_t elapsedSeconds = (.*);", source).group(1)
-code += "uint32_t progress(uint32_t boundedRemaining,uint32_t totalSeconds){return " + progress + ";}\n"
+code += function("focusProgressWidth") + "\n"
+code += function("formatDuration") + "\n"
+code += r'''
+int32_t testRemaining=7198;
+int32_t dashboardFocusRemainingSeconds(){return testRemaining;}
+void hashCString(uint32_t &hash,const char *s){while(*s)hash=(hash^static_cast<uint8_t>(*s++))*16777619UL;}
+void hashValue(uint32_t &hash,int value){hash=(hash^static_cast<uint32_t>(value))*16777619UL;}
+'''
+focus_case = re.search(r"case DASHBOARD_PAGE_FOCUS: \{[\s\S]*?\n        \}", source).group(0)
+code += "uint32_t focusHash(){uint32_t hash=2166136261UL;switch(0){" + focus_case.replace("DASHBOARD_PAGE_FOCUS", "0") + "}return hash;}\n"
 code += r'''
 int main(){
  assert(!displayValidateImage(nullptr));assert(TJpgDec.drawCalls==0);
@@ -157,10 +165,16 @@ int main(){
  assert(chooseFittingFont("12:34",220,fonts,5)==7);
  assert(chooseFittingFont("123",200,fonts,5,16)==2);
  assert(chooseFittingFont("123",200,fonts,5,8)==1);
- assert(progress(1500,1500)==0);
- assert(progress(1600,1500)==0);
- assert(progress(1499,1500)==1);
- assert(progress(0,1500)==1500);
+ assert(focusProgressWidth(1500)==0);
+ assert(focusProgressWidth(1600)==0);
+ assert(focusProgressWidth(750)==92);
+ assert(focusProgressWidth(0)==184);
+ assert(focusProgressWidth(-1)==184);
+ dashboardData.focus.durationMinutes=0;assert(focusProgressWidth(100)==0);
+ dashboardData.focus.durationMinutes=240;
+ uint32_t previousHash=focusHash();testRemaining--;assert(focusHash()==previousHash);
+ testRemaining=7139;assert(focusHash()!=previousHash);
+ testRemaining=3599;previousHash=focusHash();testRemaining--;assert(focusHash()!=previousHash);
  for(int height : {70,80,160}) {
    drawHomeAssistantCard(16,48,208,height,0,0,0);
    assert(tft.lastY+tft.fontHeight(tft.lastFont)<=48+height-14);

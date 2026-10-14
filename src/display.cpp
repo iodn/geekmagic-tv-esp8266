@@ -471,6 +471,14 @@ String formatDuration(int32_t totalSeconds) {
     return String(buffer);
 }
 
+int focusProgressWidth(int32_t remainingSeconds) {
+    uint32_t totalSeconds = static_cast<uint32_t>(dashboardData.focus.durationMinutes) * 60UL;
+    if (totalSeconds == 0) return 0;
+    uint32_t remaining = remainingSeconds > 0 ? static_cast<uint32_t>(remainingSeconds) : 0U;
+    uint32_t elapsed = remaining < totalSeconds ? totalSeconds - remaining : 0U;
+    return static_cast<int>((elapsed * 184UL) / totalSeconds);
+}
+
 String formatRelativeCountdown(int32_t totalSeconds) {
     int32_t boundedSeconds = (totalSeconds > 0) ? totalSeconds : 0;
     if (boundedSeconds <= 0) {
@@ -1292,7 +1300,9 @@ uint32_t dashboardDynamicHash(uint8_t pageId) {
         }
         case DASHBOARD_PAGE_FOCUS: {
             int32_t remainingSeconds = dashboardFocusRemainingSeconds();
-            hashValue(hash, remainingSeconds);
+            String timeText = formatDuration(remainingSeconds);
+            hashCString(hash, timeText.c_str());
+            hashValue(hash, focusProgressWidth(remainingSeconds));
             break;
         }
         case DASHBOARD_PAGE_WORLD: {
@@ -1472,16 +1482,9 @@ void updateFocusDynamicArea() {
     int progressX = 28;
     int progressY = 178;
     tft.fillRoundRect(progressX, progressY, progressWidth, progressHeight, 4, theme.surfaceAlt);
-    if (dashboardData.focus.durationMinutes > 0) {
-        uint32_t totalSeconds = static_cast<uint32_t>(dashboardData.focus.durationMinutes) * 60UL;
-        uint32_t boundedRemaining = remainingSeconds > 0 ? static_cast<uint32_t>(remainingSeconds) : 0U;
-        uint32_t elapsedSeconds = (boundedRemaining < totalSeconds) ? (totalSeconds - boundedRemaining) : 0U;
-        uint32_t safeTotal = totalSeconds > 0 ? totalSeconds : 1U;
-        int filledWidth = map(elapsedSeconds, 0, safeTotal, 0, progressWidth);
-        filledWidth = constrain(filledWidth, 0, progressWidth);
-        if (filledWidth > 0) {
-            tft.fillRoundRect(progressX, progressY, filledWidth, progressHeight, 4, theme.accent);
-        }
+    int filledWidth = focusProgressWidth(remainingSeconds);
+    if (filledWidth > 0) {
+        tft.fillRoundRect(progressX, progressY, filledWidth, progressHeight, 4, theme.accent);
     }
 
 }
