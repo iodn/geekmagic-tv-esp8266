@@ -1,50 +1,66 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-# SmartClock API Test Script
-# Usage: ./test-api.sh [hostname or IP]
-
-HOST=${1:-smartclock.local}
-BASE_URL="http://$HOST"
-
-echo "Testing SmartClock API at $BASE_URL"
-echo "======================================"
-
-echo -e "\n1. Get device status:"
-curl -s "$BASE_URL/app.json" | jq .
-
-echo -e "\n2. Get storage info:"
-curl -s "$BASE_URL/space.json" | jq .
-
-echo -e "\n3. Get brightness:"
-curl -s "$BASE_URL/brt.json" | jq .
-
-echo -e "\n4. Set brightness to 50%:"
-curl -s "$BASE_URL/set?brt=50"
-
-echo -e "\n\n5. Set theme to 3 (custom image):"
-curl -s "$BASE_URL/set?theme=3"
-
-echo -e "\n\n6. Send live update:"
-curl -s -X POST "$BASE_URL/api/update" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "line1": "12:45",
-    "line2": "2500W",
-    "lineMedia": "Now playing: Test Song",
-    "line3": "25°C",
-    "line4": "60%",
-    "line5": "720W",
-    "line6": "5.2kW",
-    "bar": 0.5
-  }'
-
-echo -e "\n\n7. Upload test image (if test.jpg exists):"
-if [ -f test.jpg ]; then
-  curl -s -F "file=@test.jpg" "$BASE_URL/doUpload?dir=/image/"
-  echo -e "\n\n8. Display uploaded image:"
-  curl -s "$BASE_URL/set?img=/image/test.jpg"
-else
-  echo "test.jpg not found - skipping upload test"
+# Usage: SMARTCLOCK_PASSWORD=... ./test-api.sh <hostname-or-IP>
+# Previews brightness and discards that preview; refuses existing display drafts.
+if [[ $# != 1 ]]; then
+    echo "Usage: SMARTCLOCK_PASSWORD=... $0 <hostname-or-IP>" >&2
+    exit 2
 fi
-
-echo -e "\n\nTests complete!"
+command -v curl >/dev/null
+command -v jq >/dev/null
+base_url="http://$1"
+if [[ -z ${SMARTCLOCK_PASSWORD:-} ]]; then
+    read -rsp 'Admin password: ' SMARTCLOCK_PASSWORD
+    echo
+fi
+umask 077
+test_dir=$(mktemp -d)
+preview_started=false
+cleanup() {
+    if $preview_started; then
+        curl -fsS -b "$test_dir/cookies" -X POST "$base_url/dashboard/discard" >/dev/null || true
+    fi
+    rm -rf "$test_dir"
+}
+trap cleanup EXIT
+request() {
+    local expected=$1 path=$2
+    shift 2
+    local status
+    status=$(curl -sS --connect-timeout 5 --max-time 30 \
+        -b "$test_dir/cookies" -c "$test_dir/cookies" \
+        -o "$test_dir/response" -w '%{http_code}' "$base_url$path" "$@")
+    if [[ $status != "$expected" ]]; then
+        echo "$path: expected HTTP $expected, received $status" >&2
+        exit 1
+    fi
+}
+jq -n --arg password "$SMARTCLOCK_PASSWORD" '{username:"admin", password:$password}' > "$test_dir/login"
+request 200 /auth/login -H 'Content-Type: application/json' --data-binary "@$test_dir/login"
+rm "$test_dir/login"
+unset SMARTCLOCK_PASSWORD
+request 200 /app.json
+jq -e '.displayDraft == false and (.brt | type == "number")' "$test_dir/response" >/dev/null
+original_brightness=$(jq -r '.brt' "$test_dir/response")
+for path in /dashboard.json /feeds.json /space.json /version.json /brt.json; do
+    request 200 "$path"
+    jq -e 'type == "object"' "$test_dir/response" >/dev/null
+    echo "$path OK"
+done
+request 400 /api/update -H 'Content-Type: application/json' --data-binary '{"line1":123}'
+request 200 /app.json
+preview_brightness=50
+if [[ $original_brightness == 50 ]]; then preview_brightness=51; fi
+preview_started=true
+request 200 /dashboard/live -H 'Content-Type: application/json' \
+    --data-binary "{\"settings\":{\"brightness\":$preview_brightness}}"
+request 200 /app.json
+jq -e --argjson value "$preview_brightness" '.brt == $value and .displayDraft' "$test_dir/response" >/dev/null
+request 200 /dashboard/discard -X POST
+preview_started=false
+request 200 /app.json
+jq -e --argjson value "$original_brightness" '.brt == $value and .displayDraft == false' "$test_dir/response" >/dev/null
+request 200 /auth/logout -X POST
+request 401 /app.json
+echo 'Authenticated API checks passed; brightness restored.'
