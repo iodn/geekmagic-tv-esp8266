@@ -54,6 +54,7 @@ public:
 #include <new>
 #include <ucontext.h>
 #include <iostream>
+#include <vector>
 using std::isfinite;
 FeedConfig feedConfig{};
 FeedRuntimeState feedRuntime{};
@@ -62,7 +63,8 @@ unsigned long millis() { return clockMs; }
 struct cont_t { ucontext_t context, caller; char stack[262144]; bool initialized = false; };
 cont_t mainCont;
 cont_t *g_pcont = &mainCont;
-void cont_init(cont_t*) {}
+int workerStarts=0;
+void cont_init(cont_t*) {++workerStarts;}
 void cont_suspend(cont_t *c) { swapcontext(&c->context, &c->caller); }
 void yield() { cont_suspend(g_pcont); }
 void cont_run(cont_t *c, void (*worker)()) {
@@ -101,6 +103,7 @@ std::unique_ptr<cont_t> feedContinuation;
 uint16_t pendingSyncMask = 0, activeSyncMask = 0;
 bool feedJobRunning = false, feedJobComplete = false, lastSyncSuccess = false;
 bool feedJobsCancelled = false;
+bool feedBatchActive = false;
 String lastSyncError;
 FeedHttpClient *activeHttpClient = nullptr;
 uint32_t activeRequestStartedMs = 0;
@@ -118,7 +121,9 @@ bool syncWeather(String *error) {
     *error = "Request deadline exceeded";
     return false;
 }
-bool syncMarket(uint8_t, String*) { yield(); return true; }
+std::vector<int> marketCalls;
+int failedMarket=-1;
+bool syncMarket(uint8_t index, String*error) {marketCalls.push_back(index);yield();if(index==failedMarket){*error="HTTP 404";return false;}return true;}
 bool feedsSearchWeatherLocations(const String&, String &json, String*) {
     yield(); yield(); json = "search result"; return true;
 }
@@ -241,6 +246,35 @@ int main() {
     while (feedsBusy()) { pumpFeedJob(); ++heartbeat; assert(heartbeat < 5); }
     assert(!lastSyncSuccess && lastSyncError == "Feed job cancelled");
     assert(g_pcont == &mainCont && !feedContinuation);
+    feedJobsCancelled = false;
+    int starts=workerStarts;
+    pendingSyncMask=kMarketJobBase|(kMarketJobBase<<1)|(kMarketJobBase<<2);
+    failedMarket=1;marketCalls.clear();heartbeat=0;
+    while(feedsBusy()) {
+        pumpFeedJob();++heartbeat;assert(heartbeat<20);
+        if(feedJobRunning)assert((activeSyncMask&(activeSyncMask-1))==0);
+        assert(g_pcont==&mainCont);
+    }
+    assert(workerStarts-starts==3&&marketCalls==std::vector<int>({0,1,2}));
+    assert(!lastSyncSuccess&&lastSyncError=="HTTP 404"&&!feedContinuation);
+    starts=workerStarts;failedMarket=-1;marketCalls.clear();
+    pendingSyncMask=kMarketJobBase|(kMarketJobBase<<1);heartbeat=0;
+    while(feedsBusy()){pumpFeedJob();assert(++heartbeat<12);}
+    assert(workerStarts-starts==2&&lastSyncSuccess&&lastSyncError.isEmpty());
+    pendingSyncMask=kHomeAssistantJob|kMarketJobBase;marketCalls.clear();pumpFeedJob();
+    assert(activeSyncMask==kMarketJobBase&&marketCalls==std::vector<int>({0}));
+    feedsCancelJobs();heartbeat=0;
+    while(feedsBusy()){pumpFeedJob();assert(++heartbeat<5);}
+    feedJobsCancelled=false;
+    pendingSyncMask=kMarketJobBase|(kMarketJobBase<<1);marketCalls.clear();
+    do{pumpFeedJob();}while(feedJobRunning);
+    assert(feedsBusy()&&feedBatchActive&&!feedContinuation);
+    feedsCancelJobs();assert(!feedsBusy()&&!feedBatchActive&&!lastSyncSuccess&&lastSyncError=="Feed job cancelled");
+    feedJobsCancelled=false;
+    pendingSyncMask=kWeatherJob|kMarketJobBase;marketCalls.clear();pumpFeedJob();
+    feedsCancelJobs();heartbeat=0;
+    while(feedsBusy()){pumpFeedJob();assert(++heartbeat<5);}
+    assert(marketCalls.empty()&&!lastSyncSuccess&&lastSyncError=="Feed job cancelled");
     feedJobsCancelled = false;
     searchStatus = FEED_SEARCH_PENDING;
     heartbeat = 0;

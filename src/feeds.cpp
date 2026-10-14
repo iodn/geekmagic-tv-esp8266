@@ -71,6 +71,7 @@ uint16_t pendingSyncMask = 0;
 uint16_t activeSyncMask = 0;
 bool feedJobRunning = false;
 bool feedJobComplete = false;
+bool feedBatchActive = false;
 bool feedJobsCancelled = false;
 bool lastSyncSuccess = false;
 String lastSyncError;
@@ -2035,8 +2036,8 @@ void runFeedJob() {
             }
             record(success, error);
         }
-        lastSyncSuccess = anySuccess && firstError.isEmpty();
-        lastSyncError = firstError;
+        lastSyncSuccess = lastSyncSuccess && anySuccess && firstError.isEmpty();
+        if (lastSyncError.isEmpty()) lastSyncError = firstError;
     }
     if (feedJobsCancelled) {
         lastSyncSuccess = false;
@@ -2046,20 +2047,23 @@ void runFeedJob() {
             searchError = lastSyncError;
         }
     }
-    if (activeSyncMask != 0 && !lastSyncSuccess) {
-        logPrintf(F("Feed sync failed: %s"), lastSyncError.c_str());
-    }
     feedJobComplete = true;
 }
 
 void pumpFeedJob() {
     if (!feedJobRunning) {
         if (pendingSyncMask == 0 && searchStatus != FEED_SEARCH_PENDING) return;
+        if (pendingSyncMask && !feedBatchActive) {
+            feedBatchActive = true;
+            lastSyncSuccess = true;
+            lastSyncError = "";
+        }
         feedContinuation.reset(new (std::nothrow) cont_t);
         if (!feedContinuation) {
             lastSyncSuccess = false;
             lastSyncError = "Feed worker allocation failed";
             pendingSyncMask = 0;
+            feedBatchActive = false;
             if (searchStatus == FEED_SEARCH_PENDING) {
                 searchStatus = FEED_SEARCH_FAILED;
                 searchError = lastSyncError;
@@ -2067,8 +2071,13 @@ void pumpFeedJob() {
             return;
         }
         cont_init(feedContinuation.get());
-        activeSyncMask = pendingSyncMask;
-        pendingSyncMask = 0;
+        activeSyncMask = 0;
+        if (pendingSyncMask) {
+            // Weather and markets precede Home Assistant, as in the original batch.
+            uint16_t jobs = pendingSyncMask & ~kHomeAssistantJob;
+            activeSyncMask = jobs ? (jobs & (0U - jobs)) : kHomeAssistantJob;
+            pendingSyncMask &= ~activeSyncMask;
+        }
         feedJobRunning = true;
         feedJobComplete = false;
     }
@@ -2092,7 +2101,12 @@ void pumpFeedJob() {
     if (feedJobComplete) {
         feedJobRunning = false;
         activeSyncMask = 0;
+        // Release the 4 KB worker stack between feeds so free DRAM can coalesce.
         feedContinuation.reset();
+        if (feedBatchActive && pendingSyncMask == 0) {
+            if (!lastSyncSuccess) logPrintf(F("Feed sync failed: %s"), lastSyncError.c_str());
+            feedBatchActive = false;
+        }
     }
 }
 
@@ -2237,6 +2251,11 @@ bool feedsBusy() {
 void feedsCancelJobs() {
     feedJobsCancelled = true;
     pendingSyncMask = 0;
+    if (!feedJobRunning && feedBatchActive) {
+        feedBatchActive = false;
+        lastSyncSuccess = false;
+        lastSyncError = F("Feed job cancelled");
+    }
     if (!feedJobRunning && searchStatus == FEED_SEARCH_PENDING) {
         searchStatus = FEED_SEARCH_FAILED;
         searchError = "Feed job cancelled";
