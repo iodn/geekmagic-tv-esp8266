@@ -45,7 +45,8 @@ using __FlashStringHelper=char;
 void displayShowMessage(const String&){}void logPrint(const String&){}
 int restoredDashboard=0;void displayShowDashboard(){++restoredDashboard;displayState.apMode=false;assert(std::string(displayState.ipInfo)=="192.168.1.5");}void logPrintf(const char*,...){}void logHeapState(const char*){}void logOptionalServiceDelay(const char*,uint32_t){}
 String generateRandomPassword(int){return "12345678";}
-struct {bool success=false;int beginCalls=0,endCalls=0;bool begin(const char*){++beginCalls;return success;}void end(){++endCalls;}void addService(const char*,const char*,int){}void addServiceTxt(const char*,const char*,const char*,const char*){}} MDNS;
+bool feedBusy=false;bool feedsBusy(){return feedBusy;}
+struct {int updates=0;void update(){++updates;}bool success=false;int beginCalls=0,endCalls=0;bool begin(const char*){++beginCalls;return success;}void end(){++endCalls;}void addService(const char*,const char*,int){}void addServiceTxt(const char*,const char*,const char*,const char*){}} MDNS;
 struct {void println(const char*){}void printf(const char*,...){}} Serial;
 struct {int ends=0;void end(){++ends;}} ArduinoOTA;
 struct {uint32_t heap=40000;uint32_t getFreeHeap(){return heap;}} ESP;
@@ -67,8 +68,14 @@ code+='\nint restarts=0;void queueRestart(){++restarts;}\n'
 for name in ['copyConfiguredHostname','applyConfiguredHostname','ensureSetupAP','startWiFiReconnect','trackWiFiReconnectAttempt','setupWiFi','monitorWiFi','setupMDNS','startDeferredNetworkServices']:code+='\n'+extract(name)
 for name in ["copyString","startQueuedWiFiConnect","failWiFiConnectTask","processWiFiConnectTask"]:
     code+="\n"+extract(name,"webserver.cpp")
+mdns_update=re.search(r'if \(mdnsStarted[^\n]*\) \{\s*MDNS.update\(\);\s*\}',source).group(0)
+code+='\nvoid serviceMDNS(){'+mdns_update+'}\n'
 code+=r'''
 int main(){
+ mdnsStarted=true;feedBusy=true;serviceMDNS();assert(MDNS.updates==0);
+ feedBusy=false;serviceMDNS();assert(MDNS.updates==1);
+ mdnsStarted=false;serviceMDNS();assert(MDNS.updates==1);
+
  setupWiFi();assert(now==100);assert(WiFi.beginCalls==1);assert(WiFi.ap);assert(WiFi.modeValue==WIFI_AP_STA);assert(wifiFailsafeMode);assert(wifiReconnectActive);assert(setupDns.starts==1);assert(setupDns.active);
  int dnsStarts=setupDns.starts;monitorWiFi();monitorWiFi();assert(setupDns.starts==dnsStarts);
  assert(WiFi.ssid=="saved-network");assert(WiFi.disconnectCalls==0);

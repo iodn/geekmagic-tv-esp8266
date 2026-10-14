@@ -425,6 +425,10 @@ void setup() {
     const rst_info* resetInfo = ESP.getResetInfoPtr();
     uint8_t resetReason = resetInfo ? resetInfo->reason : 0xFF;
     logPrintf(F("Reset reason: %s (%u)"), describeResetReason(resetReason), resetReason);
+    if (resetReason == REASON_EXCEPTION_RST) {
+        logPrintf(F("Exception: cause=%u pc=%08x address=%08x"),
+                  resetInfo->exccause, resetInfo->epc1, resetInfo->excvaddr);
+    }
 
 
 
@@ -693,7 +697,7 @@ void loop() {
             if (otaStarted && !feedsBusy()) {
                 ArduinoOTA.handle();
             }
-            if (mdnsStarted) {
+            if (mdnsStarted && !feedsBusy()) {
                 MDNS.update();
             }
         }
