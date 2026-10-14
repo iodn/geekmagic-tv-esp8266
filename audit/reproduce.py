@@ -16,6 +16,7 @@ for name in (
     'test-image-render.py',
     'test-wrapped-display.py',
     'device-ui-preview.py',
+    'test-theme-palettes.py',
     'test-display-heap.py',
     'test-upload.py',
     'test-jpeg.py',

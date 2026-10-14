@@ -1898,9 +1898,9 @@ const timezoneOptions = [
 ];
 
 const themeLabels = [
-    { value: 0, label: "Aurora", tones: ["#080F1D", "#122035", "#58DAC1"] },
-    { value: 1, label: "Sunset", tones: ["#200C16", "#3A1727", "#FFA456"] },
-    { value: 2, label: "Terminal", tones: ["#060E08", "#0C1D10", "#69FF6F"] }
+    { value: 0, label: "Aurora", tones: ["#0F121B", "#1D232F", "#A8C7FA"] },
+    { value: 1, label: "Sunset", tones: ["#21100B", "#3D221A", "#FFB74D"] },
+    { value: 2, label: "Terminal", tones: ["#09120E", "#13241C", "#A5E6AE"] }
 ];
 
 const defaultCustomTheme = {
