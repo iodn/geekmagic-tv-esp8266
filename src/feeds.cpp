@@ -940,6 +940,9 @@ bool tlsHeapReady() {
     uint32_t freeHeap = 0;
     uint32_t largestBlock = 0;
     ESP.getHeapStats(&freeHeap, &largestBlock);
+    // The core's 6.2 KB BearSSL stack must be allocated in DRAM; IRAM cannot
+    // replace it. Leave room for the client object before that allocation.
+    if (largestBlock < 8000UL) return false;
 #ifdef UMM_HEAP_IRAM
     // BearSSL prefers the secondary heap for its receive/transmit buffers.
     {

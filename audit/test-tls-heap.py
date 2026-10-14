@@ -23,6 +23,9 @@ code+=r'''
 int main(){
 #ifdef UMM_HEAP_IRAM
  assert(tlsHeapReady());assert(heap==0);
+ freeBytes[0]=7000;maxBytes[0]=7000;freeBytes[1]=20000;maxBytes[1]=20000;
+ assert(!tlsHeapReady());assert(heap==0);
+ freeBytes[0]=14728;maxBytes[0]=14000;freeBytes[1]=18000;maxBytes[1]=18000;
  maxBytes[1]=16000;assert(!tlsHeapReady());assert(heap==0);
  maxBytes[1]=18000;freeBytes[0]=4000;assert(!tlsHeapReady());assert(heap==0);
  freeBytes[0]=25000;maxBytes[0]=17000;freeBytes[1]=1000;maxBytes[1]=1000;assert(tlsHeapReady());
