@@ -8,6 +8,7 @@
 #include <LittleFS.h>
 #include <TJpg_Decoder.h>
 #include <time.h>
+#include <math.h>
 #include <vector>
 
 #define FONT_INFO 1
@@ -255,6 +256,32 @@ uint8_t activeThemeIdValue() {
     return constrain(selection.theme, 0, DASHBOARD_THEME_COUNT - 1);
 }
 
+float themeLuminance(uint16_t color) {
+    Rgb888 rgb = rgb565ToRgb888(color);
+    const uint8_t channels[] = {rgb.red, rgb.green, rgb.blue};
+    const float weights[] = {0.2126f, 0.7152f, 0.0722f};
+    float luminance = 0;
+    for (uint8_t index = 0; index < 3; ++index) {
+        float value = channels[index] / 255.0f;
+        luminance += weights[index] * (value <= 0.04045f ? value / 12.92f : powf((value + 0.055f) / 1.055f, 2.4f));
+    }
+    return luminance;
+}
+
+uint16_t readableDerivedColor(uint16_t color, uint16_t background) {
+    float backgroundLuminance = themeLuminance(background);
+    Rgb888 original = rgb565ToRgb888(color);
+    // Pick the endpoint with the strongest contrast, then retain as much hue as possible.
+    Rgb888 endpoint = backgroundLuminance < 0.179f ? Rgb888{255, 255, 255} : Rgb888{0, 0, 0};
+    for (uint8_t weight = 0; weight <= 100; weight += 4) {
+        uint16_t candidate = rgb888ToRgb565(blendRgb(original, endpoint, weight));
+        float luminance = themeLuminance(candidate);
+        float contrast = (max(luminance, backgroundLuminance) + 0.05f) / (min(luminance, backgroundLuminance) + 0.05f);
+        if (contrast >= 4.5f) return candidate;
+    }
+    return rgb888ToRgb565(endpoint);
+}
+
 ThemePalette buildCustomTheme(const ThemePalette &base,
                               const char *backgroundColor,
                               const char *surfaceColor,
@@ -278,9 +305,10 @@ ThemePalette buildCustomTheme(const ThemePalette &base,
     theme.accentSoft = rgb888ToRgb565(blendRgb(surface, accent, 28));
     theme.text = rgb888ToRgb565(text);
     theme.muted = rgb888ToRgb565(blendRgb(text, background, 52));
-    theme.positive = base.positive;
-    theme.negative = base.negative;
-    theme.warning = base.warning;
+    theme.muted = readableDerivedColor(theme.muted, theme.background);
+    theme.positive = readableDerivedColor(base.positive, theme.background);
+    theme.negative = readableDerivedColor(base.negative, theme.background);
+    theme.warning = readableDerivedColor(base.warning, theme.background);
     return theme;
 }
 
@@ -310,17 +338,25 @@ bool tftOutput(int16_t x, int16_t y, uint16_t width, uint16_t height, uint16_t *
 
 const ThemePalette& activeTheme() {
     static ThemePalette customTheme;
+    static uint32_t customThemeHash = 0;
+    static bool customThemeValid = false;
     ThemeSelection selection = effectiveThemeSelection();
     uint8_t themeIndex = constrain(selection.theme, 0, DASHBOARD_THEME_COUNT - 1);
     if (!selection.customThemeEnabled) {
         return kThemes[themeIndex];
     }
 
+    uint32_t hash = kFnvOffset;
+    hashThemeConfig(hash);
+    if (customThemeValid && hash == customThemeHash) return customTheme;
+
     customTheme = buildCustomTheme(kThemes[themeIndex],
                                    selection.background,
                                    selection.surface,
                                    selection.accent,
                                    selection.text);
+    customThemeHash = hash;
+    customThemeValid = true;
     return customTheme;
 }
 
