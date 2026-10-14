@@ -24,6 +24,7 @@ for name in (
     'regression-dashboard.py',
     'feed-regressions.py',
     'test-tls-heap.py',
+    'test-http-heap.py',
     'test-tls-client.py',
     'test-feed-errors.py',
     'regression-network.py',

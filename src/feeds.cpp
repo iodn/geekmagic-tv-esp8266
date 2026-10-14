@@ -28,7 +28,10 @@ constexpr uint16_t kHomeAssistantMinRefreshMinutes = 1;
 constexpr uint16_t kHomeAssistantMaxRefreshMinutes = 240;
 constexpr uint32_t kHttpTimeoutMs = 12000;
 constexpr uint32_t kFeedStartupGracePeriodMs = 15000UL;
-constexpr uint32_t kHttpsMinFreeHeapBytes = 24000UL;
+constexpr uint32_t kHttpsMinFreeHeapBytes = 32000UL;
+constexpr uint32_t kHttpsMinDramHeapBytes = 14000UL;
+constexpr uint32_t kHttpsMinDramBlockBytes = 12000UL;
+constexpr uint32_t kHttpsHeapWaitMs = 2000UL;
 constexpr uint16_t kHttpsDefaultRecvBufferBytes = 16384;
 constexpr uint16_t kHttpsCompactXmitBufferBytes = 512;
 constexpr uint32_t kRequestDeadlineMs = 24000UL;
@@ -953,9 +956,11 @@ bool tlsHeapReady() {
     uint32_t freeHeap = 0;
     uint32_t largestBlock = 0;
     ESP.getHeapStats(&freeHeap, &largestBlock);
-    // The core's 6.2 KB BearSSL stack must be allocated in DRAM; IRAM cannot
-    // replace it. Leave room for the client object before that allocation.
-    if (largestBlock < 8000UL) return false;
+    // The crypto stack, SSL engine and certificate validator use primary DRAM.
+    // Spare IRAM for record buffers cannot replace their allocation headroom.
+    if (freeHeap < kHttpsMinDramHeapBytes || largestBlock < kHttpsMinDramBlockBytes) {
+        return false;
+    }
 #ifdef UMM_HEAP_IRAM
     // BearSSL prefers the secondary heap for its receive/transmit buffers.
     {
@@ -971,6 +976,27 @@ bool tlsHeapReady() {
     // BearSSL adds 325 bytes of TLS record overhead to the receive buffer.
     return freeHeap >= kHttpsMinFreeHeapBytes &&
            largestBlock >= static_cast<uint32_t>(kHttpsDefaultRecvBufferBytes) + 325UL;
+}
+
+
+bool waitForTlsHeap(String *error) {
+    uint32_t started = millis();
+    while (true) {
+        if (feedJobsCancelled) {
+            if (error) *error = F("Feed job cancelled");
+            return false;
+        }
+        if (tlsHeapReady()) return true;
+        if (millis() - started >= kHttpsHeapWaitMs) {
+            uint32_t freeHeap = 0, largestBlock = 0;
+            ESP.getHeapStats(&freeHeap, &largestBlock);
+            logPrintf(F("TLS deferred: DRAM free=%u max=%u"), freeHeap, largestBlock);
+            if (error) *error = F("Low heap, retrying later");
+            return false;
+        }
+        // Let closed API/provider sockets release their buffers before the next TLS request.
+        delay(50);
+    }
 }
 
 bool httpGetJson(const String &url,
@@ -1095,10 +1121,7 @@ bool httpGetJson(const String &url,
         }
     } displayHeapGuard;
 
-    if (!tlsHeapReady()) {
-        if (error) *error = F("Low heap, retrying later");
-        return false;
-    }
+    if (!waitForTlsHeap(error)) return false;
     std::unique_ptr<FeedTlsClient> client(new (std::nothrow) FeedTlsClient());
     if (!client) {
         if (error) *error = F("TLS client allocation failed");

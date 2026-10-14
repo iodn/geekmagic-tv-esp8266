@@ -71,6 +71,8 @@ constexpr uint32_t kAuthSessionMaxAgeSec = 12UL * 60UL * 60UL;
 constexpr char kAuthSessionCookieName[] = "SCSESSID";
 
 void prepareNoStoreHeaders() {
+    // Release browser connections between API polls to leave room for TLS.
+    server.keepAlive(false);
     server.sendHeader("Cache-Control", "no-store, max-age=0");
     server.sendHeader("Pragma", "no-cache");
     server.sendHeader("Expires", "0");

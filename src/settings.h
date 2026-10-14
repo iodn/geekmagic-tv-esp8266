@@ -11,7 +11,7 @@
 
 // Semantic firmware release version
 #ifndef FIRMWARE_VERSION_STRING
-#define FIRMWARE_VERSION_STRING "2.3.0"
+#define FIRMWARE_VERSION_STRING "2.3.1"
 #endif
 
 struct Settings {
