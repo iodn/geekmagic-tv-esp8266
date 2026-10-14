@@ -46,11 +46,14 @@ struct WiFiConnectTask {
     bool waitingForIp;
     char ssid[33];
     char password[65];
+    char previousSsid[33];
+    char previousPassword[65];
+    bool previousPersistent;
     unsigned long startedAtMs;
     unsigned long ipWaitStartedAtMs;
 };
 
-WiFiConnectTask wifiConnectTask = {false, false, false, {0}, {0}, 0, 0};
+WiFiConnectTask wifiConnectTask = {};
 
 constexpr unsigned long kWiFiConnectTimeoutMs = 20000UL;
 constexpr unsigned long kWiFiIpWaitTimeoutMs = 10000UL;
@@ -549,7 +552,10 @@ void startQueuedWiFiConnect() {
     wifiFailsafeMode = false;
     displayShowMessage(String("Connecting\n") + wifiConnectTask.ssid);
 
-    WiFi.persistent(true);
+    copyString(wifiConnectTask.previousSsid, sizeof(wifiConnectTask.previousSsid), WiFi.SSID().c_str());
+    copyString(wifiConnectTask.previousPassword, sizeof(wifiConnectTask.previousPassword), WiFi.psk().c_str());
+    wifiConnectTask.previousPersistent = WiFi.getPersistent();
+    WiFi.persistent(false);
     WiFi.setAutoReconnect(true);
     WiFi.softAPdisconnect(true);
     delay(100);
@@ -567,9 +573,17 @@ void failWiFiConnectTask(const __FlashStringHelper *reason) {
     wifiConnectTask.active = false;
     wifiConnectTask.waitingForIp = false;
 
-    WiFi.disconnect(true);
-    delay(100);
-    WiFi.mode(WIFI_AP);
+    WiFi.disconnect(false, false);
+    WiFi.mode(WIFI_AP_STA);
+    if (wifiConnectTask.previousSsid[0] != '\0') {
+        WiFi.begin(wifiConnectTask.previousSsid, wifiConnectTask.previousPassword);
+    } else {
+        // Clear only the failed candidate in RAM; persisted credentials are untouched.
+        WiFi.disconnect(false, true);
+    }
+    WiFi.persistent(wifiConnectTask.previousPersistent);
+    memset(wifiConnectTask.password, 0, sizeof(wifiConnectTask.password));
+    memset(wifiConnectTask.previousPassword, 0, sizeof(wifiConnectTask.previousPassword));
     WiFi.softAP(WIFI_AP_NAME, apPassword.c_str());
     wifiFailsafeMode = true;
     displayShowAPScreen(WIFI_AP_NAME, apPassword.c_str(), WiFi.softAPIP().toString().c_str());
@@ -589,6 +603,11 @@ void processWiFiConnectTask() {
         if (WiFi.localIP() != IPAddress(0, 0, 0, 0)) {
             wifiConnectTask.active = false;
             wifiConnectTask.waitingForIp = false;
+            WiFi.persistent(true);
+            WiFi.begin(wifiConnectTask.ssid, wifiConnectTask.password);
+            WiFi.persistent(wifiConnectTask.previousPersistent);
+            memset(wifiConnectTask.password, 0, sizeof(wifiConnectTask.password));
+            memset(wifiConnectTask.previousPassword, 0, sizeof(wifiConnectTask.previousPassword));
             displayShowMessage("WiFi OK\n" + WiFi.localIP().toString());
             delay(1200);
             ESP.restart();

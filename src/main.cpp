@@ -309,7 +309,7 @@ bool tryConnectWiFi(int maxAttempts) {
 
                 // Ensure WiFi is in AP mode
 
-                WiFi.disconnect(true);
+                WiFi.disconnect(true, false);
 
                 yield();
 
