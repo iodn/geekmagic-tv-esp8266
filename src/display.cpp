@@ -536,14 +536,16 @@ int chooseCanvasFittingFont(TCanvas &canvas,
                             const String &text,
                             int maxWidth,
                             const int *fontCandidates,
-                            size_t fontCandidateCount) {
+                            size_t fontCandidateCount,
+                            int maxHeight = DISPLAY_HEIGHT) {
     if (fontCandidates == nullptr || fontCandidateCount == 0) {
         return FONT_INFO;
     }
 
     for (size_t index = 0; index < fontCandidateCount; ++index) {
         int font = fontCandidates[index];
-        if (fontSupportsText(font, text) && canvas.textWidth(text, font) <= maxWidth) {
+        if (fontSupportsText(font, text) && canvas.textWidth(text, font) <= maxWidth &&
+            canvas.fontHeight(font) <= maxHeight) {
             return font;
         }
     }
@@ -696,8 +698,9 @@ void drawWrappedCenteredText(const String &text,
     }
 }
 
-int chooseFittingFont(const String &text, int maxWidth, const int *fontCandidates, size_t fontCandidateCount) {
-    return chooseCanvasFittingFont(tft, text, maxWidth, fontCandidates, fontCandidateCount);
+int chooseFittingFont(const String &text, int maxWidth, const int *fontCandidates, size_t fontCandidateCount,
+                      int maxHeight = DISPLAY_HEIGHT) {
+    return chooseCanvasFittingFont(tft, text, maxWidth, fontCandidates, fontCandidateCount, maxHeight);
 }
 
 void drawAdaptiveBadge(int x,
@@ -1706,14 +1709,14 @@ void drawHomeAssistantCard(int x,
     tft.fillRoundRect(x + 10, y + 10, 26, 4, 2, theme.accentSoft);
 
     const int labelFonts[] = {FONT_LABEL, FONT_INFO};
-    // Font 6 is digits plus a, p, and m. Words such as "Home" collapse to "m".
+    // Selection checks glyph coverage and the available card height.
     const int numericValueFonts[] = {FONT_TITLE, FONT_BODY, FONT_LABEL, FONT_INFO};
     const int textValueFonts[] = {FONT_BODY, FONT_LABEL, FONT_INFO};
     const int unitFonts[] = {FONT_INFO};
     const HomeAssistantSlotData *slot = feedsHomeAssistantSlotData(slotIndex);
     int labelY = y + 18;
     int stateY = height >= 120 ? y + 74 : (height >= 96 ? y + 50 : y + 40);
-    int unitY = height >= 120 ? y + 106 : (height >= 96 ? y + 76 : y + 61);
+    int unitY = y + height - tft.fontHeight(FONT_INFO) - 4;
 
     String label = homeAssistantSlotLabel(slotIndex);
     drawAdaptiveText(label,
@@ -1761,30 +1764,19 @@ void drawHomeAssistantCard(int x,
         ? sizeof(numericValueFonts) / sizeof(numericValueFonts[0])
         : sizeof(textValueFonts) / sizeof(textValueFonts[0]);
 
-    drawAdaptiveText(stateText,
-                     x + (width / 2),
-                     stateY,
-                     width - 20,
-                     TC_DATUM,
-                     valueFonts,
-                     valueFontCount,
-                     stateColor,
-                     fillColor);
+    int valueFont = chooseFittingFont(stateText, width - 20, valueFonts, valueFontCount,
+                                      max(0, unitY - stateY - 2));
+    tft.setTextDatum(TC_DATUM);
+    tft.setTextFont(valueFont);
+    tft.setTextColor(stateColor, fillColor);
+    tft.drawString(stateText, x + (width / 2), stateY, valueFont);
 
-    if (slot != nullptr &&
-        slot->hasData &&
-        unit.length() > 0 &&
-        (!slot->numeric || tft.textWidth(stateText, FONT_TITLE) > width - 30)) {
-        drawAdaptiveText(unit,
-                         x + (width / 2),
-                         unitY,
-                         width - 22,
-                         TC_DATUM,
-                         unitFonts,
-                         sizeof(unitFonts) / sizeof(unitFonts[0]),
-                         theme.muted,
-                         fillColor);
+    String footer = unit;
+    if (footer.length() > 0) {
+        drawAdaptiveText(footer, x + (width / 2), unitY, width - 22, TC_DATUM,
+                         unitFonts, sizeof(unitFonts) / sizeof(unitFonts[0]), theme.muted, fillColor);
     }
+
 }
 
 void renderHomePage() {
