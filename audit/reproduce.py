@@ -12,6 +12,7 @@ for name in (
     'test-auth.py',
     'test-settings.py',
     'test-display.py',
+    'test-display-heap.py',
     'test-upload.py',
     'test-jpeg.py',
     'regression-dashboard.py',

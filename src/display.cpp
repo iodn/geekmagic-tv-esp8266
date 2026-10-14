@@ -41,7 +41,8 @@ constexpr int kClockTimeY = 54;
 constexpr int kClockMetaY = 118;
 constexpr int kClockFooterY = 148;
 constexpr int kClockFooterHeight = 78;
-constexpr uint32_t kClockSpriteMinFreeHeapBytes = 30000UL;
+// The 1 bpp buffer takes about 1.7 KB; keep at least 8 KB for request handling.
+constexpr uint32_t kClockSpriteMinFreeHeapBytes = 10000UL;
 constexpr uint8_t kPageTransitionFadeDownSteps = 2;
 constexpr uint8_t kPageTransitionFadeUpSteps = 3;
 constexpr uint16_t kPageTransitionFadeStepDelayMs = 12;
