@@ -1351,7 +1351,7 @@ bool ensureClockDynamicSprite() {
     }
 
     clockDynamicSprite.deleteSprite();
-    clockDynamicSprite.setColorDepth(4);
+    clockDynamicSprite.setColorDepth(1);
     clockDynamicSpriteReady =
         clockDynamicSprite.createSprite(kClockDynamicRegionWidth, kClockDynamicRegionHeight) != nullptr;
 
@@ -1376,13 +1376,14 @@ void updateClockDynamicArea() {
     int localTimeTopY = kClockTimeY - kClockDynamicRegionY;
 
     if (ensureClockDynamicSprite()) {
-        clockDynamicSprite.fillSprite(dynamicBackground);
+        clockDynamicSprite.setBitmapColor(theme.text, dynamicBackground);
+        clockDynamicSprite.fillSprite(0);
         drawClockTime(clockDynamicSprite,
                       timeText,
                       dashboardConfig.showSeconds,
-                      theme.text,
-                      theme.muted,
-                      dynamicBackground,
+                      1,
+                      1,
+                      0,
                       kClockDynamicRegionWidth / 2,
                       localTimeTopY);
         clockDynamicSprite.pushSprite(kClockDynamicRegionX, kClockDynamicRegionY);
