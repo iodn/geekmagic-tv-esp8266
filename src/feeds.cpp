@@ -382,8 +382,7 @@ bool parseFloatStrict(const String &value, float &parsedValue) {
         return false;
     }
 
-    char buffer[32];
-    copyString(buffer, sizeof(buffer), value.c_str());
+    const char *buffer = value.c_str();
     char *end = nullptr;
     parsedValue = strtof(buffer, &end);
     if (end == nullptr || end == buffer) {
