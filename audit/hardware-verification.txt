@@ -1,0 +1,75 @@
+Firmware hardware verification — 2026-10-14
+
+Scope and recovery
+
+Standing user approval permits flashing the connected device. /dev/ttyUSB0 is
+an ESP8266EX with 4 MB flash. The original full flash was backed up privately:
+/home/intra/.local/state/geekmagic-backups/before-fixes-20261014.bin
+Size: 4,194,304 bytes; sector and full-image MD5 verified against the device.
+SHA256: 0800e79c2463685e4aa40426b387a19b34392e67a7240fb96cdcb26e00882d1c
+The backup contains private settings and is intentionally outside the repository.
+Only the application flash region was updated, preserving LittleFS, EEPROM and
+saved WiFi settings. Each write completed with esptool hash verification.
+
+Hardware findings and committed fixes
+
+f521e03 adds free heap, largest allocation and fragmentation startup diagnostics.
+80a5e33 corrects TLS gating to include the configured IRAM heap and the actual
+16 KB receive buffer plus 325-byte BearSSL overhead.
+0aaa2db additionally reserves a sufficiently large DRAM block for the core's
+mandatory 6.2 KB crypto stack and client construction.
+822eae2 reports available SSL error details alongside failed HTTPS requests.
+3a13d50 added temporary DNS/TCP/handshake distinctions. Their absence on-device
+helped identify that HTTPClient never reached the context's connect method.
+6dc58a7 fixes that integration bug: HTTPClient calls clone(), but the raw BearSSL
+context returns nullptr. The public WiFiClientSecure wrapper supports cloning
+and shares its TLS context. Cancellation accesses only the owned context's TCP
+socket, preserving TLS state while the cooperative feed worker is suspended.
+The temporary connect override was removed by this fix.
+
+Final flashed build
+
+Source: 6dc58a7 (subsequent report-only changes do not alter firmware).
+pio run: PASS. Static RAM: 50,752 / 81,920 bytes (62.0%).
+Flash: 736,827 / 1,044,464 bytes (70.5%). Binary: 740,976 bytes.
+Binary SHA256:
+7b329fcdb1c3203210b6b06678e31d39131a235ead86bf9c08d5565e6389c27c
+Private flash log: write-tls-clone.log; private boot log: tls-clone-boot.log
+Both are under /home/intra/.local/state/geekmagic-backups/.
+
+Observed final firmware behavior
+
+* Settings CRC validation, LittleFS and saved authentication initialization pass.
+* Station WiFi connects using saved credentials at 192.168.16.218.
+* Display initialization leaves 27,952 bytes free DRAM and an equally large
+  allocation block. Original installed firmware left 24,504 bytes free.
+* Secondary IRAM heap reports 18,824 bytes free with zero fragmentation.
+* Webserver starts; initial render leaves 20,168 bytes free DRAM.
+* Deferred time services, mDNS (smartclock-8bcab5.local) and OTA start successfully.
+* Clock sprite allocates at 216x64 after warmup; free DRAM is 18,752 bytes.
+* Actual HTTP weather retrieval succeeds for the saved location.
+* Actual HTTPS market requests succeed consecutively for BTC, MSFT and NVDA.
+  This exercises the native continuation, BearSSL and JSON parsing on Xtensa.
+* Boot counter resets after the stability window. Free DRAM is 18,552 bytes,
+  largest block 17,656 bytes, fragmentation 5%; IRAM returns to 18,824 bytes.
+* No watchdog reset, exception or repeated boot occurred during this capture.
+
+Host verification
+
+/usr/bin/python3 audit/reproduce.py: PASS, 18 suites (16 Python and 2 Node).
+TLS heap checks cover the two heaps, fragmentation, missing DRAM stack capacity
+and restoring heap selection. The TLS client regression exercises the actual
+class with the pinned core's clone/shared-context behavior and socket-only abort.
+Playwright/Chromium browser checks: PASS, actual generated gzipped HTML, all six
+tabs and OTA at 320/375/1280 px, keyboard focus and preview/save error recovery.
+git diff --check: PASS.
+
+Remaining checks and limits
+
+The computer is in 192.168.64.0/24 and cannot reach the TV's 192.168.16.0/24
+address. Authenticated API tests and simultaneous web-request/feed/OTA stress
+checks require reachable network access. Physical screen observations are still
+needed for flicker, readability and clipping. The successful boot and feed
+capture does not establish long-term radio stability or prove every AP compatible.
+The saved AP works with this device; this alone does not diagnose the reporter's
+WiFi issue. No changes have been pushed to GitHub.

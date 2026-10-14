@@ -149,3 +149,11 @@ work does not claim that every possible source of physical flicker is removed.
 No serial TV connection or supplied device address was available during this pass.
 Hardware access was requested; the overall improvement goal remains unfinished
 while its remaining device checks cannot be run. No firmware flash was performed.
+
+Hardware follow-up — 2026-10-14
+
+The unavailable-device/no-flash statements above describe the earlier host-only
+pass. The user subsequently plugged in the TV and granted standing flash approval.
+A verified private 4 MB backup preceded application-only firmware updates.
+See hardware-verification.txt for current measurements, the TLS clone bug found
+on-device, regression results and the remaining network/screen limitations.

@@ -6,7 +6,7 @@ an external-reset boot followed by successful firmware initialization. Credentia
 log lines were redacted during capture. The boot counter was 1; the power-cycle
 counter was reset after startup. No factory reset or flash erase was performed.
 
-Observed installed-firmware behavior
+Original installed-firmware behavior (before flashing)
 
 * Settings load and CRC validation succeed.
 * Display initializes, then applies 70 percent brightness.
@@ -35,11 +35,10 @@ The local firmware image passes esptool image_info checksum validation and has
 an ESP8266 4 MB / 40 MHz / DIO image header. Its SHA256 is:
 fe0893f544b8228d5fb848ec8ea40c0e8be5cbf282768ef6a39e874dc8dc8d31
 
-Pending work
+Subsequent hardware work
 
-Approval was requested before replacing the installed firmware. If authorized,
-back up the current flash privately, update only the firmware, and collect a new
-boot/heap/service baseline. Inspect reset stability and native continuation
-behavior. Arrange reachable HTTP access for authenticated API/feed tests. Physical
-screen observations remain needed to confirm actual flicker and visual layouts.
-No local firmware has been flashed, and nothing has been pushed to GitHub.
+The user granted standing approval to flash. The complete original 4 MB flash
+was backed up privately and verified against the device by sector and full-image
+MD5. Firmware updates preserve the filesystem, EEPROM and WiFi settings.
+See hardware-verification.txt for the new firmware measurements and remaining
+HTTP/screen checks. Nothing has been pushed to GitHub.
