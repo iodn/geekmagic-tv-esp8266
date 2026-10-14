@@ -512,6 +512,25 @@ void updateClockMetaCache(const String &metaLine) {
     clockMetaCache.valid = true;
 }
 
+bool fontSupportsText(int font, const String &text) {
+    if (font != FONT_TITLE && font != FONT_HUGE) {
+        return true;
+    }
+    for (size_t index = 0; index < text.length(); ++index) {
+        char character = text[index];
+        if ((character >= '0' && character <= '9') ||
+            character == ' ' || character == ':' || character == '.' || character == '-') {
+            continue;
+        }
+        if (font == FONT_TITLE &&
+            (character == 'a' || character == 'p' || character == 'm' || character == '|')) {
+            continue;
+        }
+        return false;
+    }
+    return true;
+}
+
 template <typename TCanvas>
 int chooseCanvasFittingFont(TCanvas &canvas,
                             const String &text,
@@ -524,12 +543,12 @@ int chooseCanvasFittingFont(TCanvas &canvas,
 
     for (size_t index = 0; index < fontCandidateCount; ++index) {
         int font = fontCandidates[index];
-        if (canvas.textWidth(text, font) <= maxWidth) {
+        if (fontSupportsText(font, text) && canvas.textWidth(text, font) <= maxWidth) {
             return font;
         }
     }
 
-    return fontCandidates[fontCandidateCount - 1];
+    return FONT_INFO;
 }
 
 template <typename TCanvas>
@@ -678,18 +697,7 @@ void drawWrappedCenteredText(const String &text,
 }
 
 int chooseFittingFont(const String &text, int maxWidth, const int *fontCandidates, size_t fontCandidateCount) {
-    if (fontCandidates == nullptr || fontCandidateCount == 0) {
-        return FONT_INFO;
-    }
-
-    for (size_t index = 0; index < fontCandidateCount; ++index) {
-        int font = fontCandidates[index];
-        if (tft.textWidth(text, font) <= maxWidth) {
-            return font;
-        }
-    }
-
-    return fontCandidates[fontCandidateCount - 1];
+    return chooseCanvasFittingFont(tft, text, maxWidth, fontCandidates, fontCandidateCount);
 }
 
 void drawAdaptiveBadge(int x,
@@ -796,8 +804,8 @@ void drawPlaceholder(const String &title, const String &message) {
     tft.setTextDatum(TC_DATUM);
     tft.fillRoundRect(98, 68, 44, 44, 22, theme.accentSoft);
     tft.setTextColor(theme.accent, theme.accentSoft);
-    tft.setTextFont(FONT_TITLE);
-    tft.drawString("?", 120, 78, FONT_TITLE);
+    tft.setTextFont(FONT_BODY);
+    tft.drawString("?", 120, 78, FONT_BODY);
 
     tft.setTextColor(theme.text, theme.surface);
     tft.setTextFont(FONT_BODY);
@@ -1473,9 +1481,10 @@ void updateEventDynamicArea() {
     const ThemePalette &theme = activeTheme();
     tft.fillRect(20, 96, 200, 52, theme.surface);
     tft.setTextDatum(TC_DATUM);
-    tft.setTextFont(FONT_HUGE);
-    tft.setTextColor(theme.accent, theme.surface);
-    tft.drawString(formatRelativeCountdown(dashboardEventRemainingSeconds()), 120, 100, FONT_HUGE);
+    const int countdownFonts[] = {FONT_HUGE, FONT_TITLE, FONT_BODY, FONT_LABEL, FONT_INFO};
+    drawAdaptiveText(formatRelativeCountdown(dashboardEventRemainingSeconds()),
+                     120, 100, 192, TC_DATUM, countdownFonts,
+                     sizeof(countdownFonts) / sizeof(countdownFonts[0]), theme.accent, theme.surface);
 }
 
 void renderClockPage() {
@@ -1947,9 +1956,9 @@ void renderQuotePage() {
 
     tft.setTextDatum(TC_DATUM);
     tft.fillRoundRect(100, 52, 40, 40, 20, theme.accentSoft);
-    tft.setTextFont(FONT_TITLE);
+    tft.setTextFont(FONT_BODY);
     tft.setTextColor(theme.accent, theme.accentSoft);
-    tft.drawString("\"", 120, 60, FONT_TITLE);
+    tft.drawString("\"", 120, 60, FONT_BODY);
 
     drawWrappedCenteredText(safeCString(dashboardData.quote.text),
                             120, 104, 186, FONT_LABEL, theme.text, theme.surface, 4);
