@@ -2461,6 +2461,12 @@ void displayBlankScreen() {
     logPrint(F("Display blanked to black."));
 }
 
+void displayInvalidateImage(const char *path) {
+    if (path != nullptr && strcmp(displayState.imagePath, path) == 0) {
+        invalidateRenderCache();
+    }
+}
+
 void displayRenderImage(const char *path) {
     if (!LittleFS.exists(path)) {
         displayShowMessage(F("Image not found"));

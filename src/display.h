@@ -33,6 +33,7 @@ void displayUpdate();
 void displayRenderClock();
 void displayRenderAPMode();
 void displayRenderImage(const char *path);
+void displayInvalidateImage(const char *path);
 void displayShowMessage(const String &msg);
 void displayShowTemporaryMessage(const String &msg, uint32_t durationMs);
 void displayShowAPScreen(const char* ssid, const char* password, const char* ip);
