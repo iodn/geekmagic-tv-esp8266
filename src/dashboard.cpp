@@ -1043,9 +1043,14 @@ bool dashboardSyncRuntimeState() {
         changed = true;
     }
 
-    if (changed) {
-        normalizeData();
-        dashboardSaveData();
+    // Anchor the saved snapshot independently; initializing the clock must never
+    // persist a live preview or clear its unsaved marker.
+    if (savedDashboardData.focus.running && savedDashboardData.focus.remainingSeconds > 0 &&
+        savedDashboardData.focus.updatedAtEpoch == 0) {
+        savedDashboardData.focus.updatedAtEpoch = now;
+    }
+    if (savedDashboardData.event.remainingSeconds > 0 && savedDashboardData.event.updatedAtEpoch == 0) {
+        savedDashboardData.event.updatedAtEpoch = now;
     }
 
     return changed;
