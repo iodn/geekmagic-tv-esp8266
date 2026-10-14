@@ -45,13 +45,17 @@ struct HttpJsonRequestOptions {
 
 // HTTPClient clones the public wrapper, sharing its underlying TLS context.
 // Abort only the context's TCP socket while the feed worker is suspended.
-class FeedTlsClient : public BearSSL::WiFiClientSecure {
+class FeedSocketAccess : public WiFiClient {
 public:
-    void abortTransport() {
-        if (!_owned) return;
-        ClientContext *socket = _owned->*(&FeedTlsClient::_client);
+    static void abortTransport(WiFiClient *client) {
+        if (!client) return;
+        ClientContext *socket = client->*(&FeedSocketAccess::_client);
         if (socket) socket->abort();
     }
+};
+class FeedTlsClient : public BearSSL::WiFiClientSecure {
+public:
+    void abortTransport() { FeedSocketAccess::abortTransport(_owned); }
 };
 class FeedHttpClient : public HTTPClient {
 public:
@@ -2045,7 +2049,7 @@ void pumpFeedJob() {
     if (activeHttpClient && (feedJobsCancelled || millis() - activeRequestStartedMs >= kRequestDeadlineMs)) {
         activeRequestExpired = true;
         if (activeTlsClient) activeTlsClient->abortTransport();
-        else activeHttpClient->abort();
+        else FeedSocketAccess::abortTransport(activeHttpClient);
     }
     // Every core yield suspends this worker to this call site. The main
     // continuation must be restored before returning to application code.
@@ -2216,7 +2220,7 @@ void feedsCancelJobs() {
     if (activeHttpClient) {
         activeRequestExpired = true;
         if (activeTlsClient) activeTlsClient->abortTransport();
-        else activeHttpClient->abort();
+        else FeedSocketAccess::abortTransport(activeHttpClient);
     }
 }
 

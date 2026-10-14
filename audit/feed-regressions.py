@@ -78,6 +78,7 @@ void cont_run(cont_t *c, void (*worker)()) {
 }
 void cont_check(cont_t*) {}
 struct WiFiClient { bool aborted = false; void abort() { aborted = true; } };
+struct FeedSocketAccess { static void abortTransport(WiFiClient *client) { if (client) client->abort(); } };
 struct FeedTlsClient : WiFiClient { void abortTransport() { aborted = true; } };
 FeedTlsClient *activeTlsClient = nullptr;
 struct { int status() { return 3; } } WiFi;
