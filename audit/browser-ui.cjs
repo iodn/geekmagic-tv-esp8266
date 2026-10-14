@@ -53,6 +53,7 @@ const source=require('./read-webui.cjs')();
         const origin=`http://127.0.0.1:${server.address().port}`;
         const mainResponse=await page.goto(origin+'/');
         if(process.env.WEB_ASSET_HEADER) assert.equal(mainResponse.headers()['content-encoding'],'gzip');
+        assert.equal(await page.locator('#fileUpload, #imagePath').count(),0);
         await page.waitForFunction(() => document.getElementById('authHint').textContent.includes('password'));
         assert(await page.locator('#appRoot').evaluate(element => element.inert));
         await page.setViewportSize({width:375,height:320});

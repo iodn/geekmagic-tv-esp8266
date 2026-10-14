@@ -1,7 +1,7 @@
 """Run the source-based regression checks replacing the original bug diagnostics.
 
 Requires the PlatformIO libraries from pio run, g++, gcc, Node.js, curl, jq,
-and Pillow for the real JPEG fixtures. No device is contacted.
+and Pillow for the display previews. No device is contacted.
 """
 from pathlib import Path
 import subprocess
@@ -13,14 +13,11 @@ for name in (
     'test-settings.py',
     'test-web-assets.py',
     'test-display.py',
-    'test-image-render.py',
     'test-wrapped-display.py',
     'device-ui-preview.py',
     'test-theme-palettes.py',
     'test-custom-theme.py',
     'test-display-heap.py',
-    'test-upload.py',
-    'test-jpeg.py',
     'regression-dashboard.py',
     'feed-regressions.py',
     'test-tls-heap.py',

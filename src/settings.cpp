@@ -23,7 +23,7 @@ struct LegacySettingsV2 {
     uint16_t version;
     int brightness;
     int theme;
-    char lastImage[64];
+    char reserved[64]; // Preserve EEPROM layout for existing settings.
     long gmtOffset;
     bool valid;
     uint32_t crc;
@@ -192,11 +192,6 @@ static Settings normalizeSettingsForSave(const Settings &settings) {
     normalized.brightness = constrain(settings.brightness, 0, 100);
     normalized.theme = constrain(settings.theme, 0, 10);
 
-    copyBoundedString(settings.lastImage,
-                      sizeof(settings.lastImage),
-                      normalized.lastImage,
-                      sizeof(normalized.lastImage));
-
     normalized.gmtOffset = constrain(settings.gmtOffset, MIN_GMT_OFFSET, MAX_GMT_OFFSET);
     char rawDeviceName[SETTINGS_DEVICE_NAME_LENGTH];
     copyBoundedString(settings.deviceName,
@@ -257,10 +252,7 @@ static bool legacySettingsValidate(const LegacySettingsV2 &settings) {
         return false;
     }
 
-    if (boundedStringLength(settings.lastImage, sizeof(settings.lastImage)) >= sizeof(settings.lastImage)) {
-        Serial.println(F("Legacy settings image path is not null-terminated"));
-        return false;
-    }
+
 
     return true;
 }
@@ -303,10 +295,7 @@ bool settingsValidate(const Settings &settings) {
         return false;
     }
 
-    if (boundedStringLength(settings.lastImage, sizeof(settings.lastImage)) >= sizeof(settings.lastImage)) {
-        Serial.println(F("Settings image path is not null-terminated"));
-        return false;
-    }
+
 
     if (boundedStringLength(settings.deviceName, sizeof(settings.deviceName)) >= sizeof(settings.deviceName)) {
         Serial.println(F("Settings device name is not null-terminated"));
@@ -329,7 +318,6 @@ void settingsReset(Settings &settings) {
     settings.version = FIRMWARE_VERSION;
     settings.brightness = 70;
     settings.theme = 0;
-    settings.lastImage[0] = '\0';
     settings.gmtOffset = 0;         // Default to UTC for a neutral out-of-box setup
     settingsDefaultDeviceName(settings.deviceName, sizeof(settings.deviceName));
     settings.valid = true;
@@ -367,10 +355,6 @@ void settingsLoad(Settings &settings) {
                 settings.version = FIRMWARE_VERSION;
                 settings.brightness = legacySettings.brightness;
                 settings.theme = legacySettings.theme;
-                copyBoundedString(legacySettings.lastImage,
-                                  sizeof(legacySettings.lastImage),
-                                  settings.lastImage,
-                                  sizeof(settings.lastImage));
                 settings.gmtOffset = legacySettings.gmtOffset;
                 settingsDefaultDeviceName(settings.deviceName, sizeof(settings.deviceName));
                 settings.valid = true;

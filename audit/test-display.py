@@ -47,14 +47,14 @@ struct Canvas {
  void drawString(const String &text,int,int y,int font){lastY=y;lastFont=font;lastText=text;}
  int fontHeight(int font){return textSize*(font==6 ? 48 : font==7 ? 48 : font==4 ? 26 : font==2 ? 16 : 8);}
 } tft;
-struct {char imagePath[64];bool apMode=true,showImage=true;} displayState;
+struct {bool apMode=true;} displayState;
 int invalidations=0,updates=0;
 void invalidateRenderCache(){++invalidations;}
 bool expired=false;
 bool temporaryMessageExpired(){return expired;}
 void displayUpdate(){++updates;}
 '''
-for name in ("trimTrailingZeros", "fontSupportsText", "chooseCanvasFittingFont", "chooseFittingFont", "displayInvalidateImage", "displayServiceTemporaryMessage"):
+for name in ("trimTrailingZeros", "fontSupportsText", "chooseCanvasFittingFont", "chooseFittingFont", "displayServiceTemporaryMessage"):
     if name == "chooseCanvasFittingFont":
         code += "template <typename TCanvas>\n"
     code += function(name) + "\n"
@@ -92,32 +92,6 @@ struct Sprite : Canvas {
 code += function("drawDynamicText") + "\n"
 code += function("updateWorldDynamicArea") + "\n"
 code += r'''
-int yields=0;
-void yield(){++yields;}
-struct File {
- bool valid=true;size_t position=0;
- std::string bytes=std::string("\xff\xd8\x01\x02\xff\xd9",6);
- explicit operator bool() const{return valid;}
- size_t size(){return bytes.size();}
- int read(){return position<bytes.size() ? static_cast<unsigned char>(bytes[position++]) : -1;}
- bool seek(size_t target){if(target>bytes.size())return false;position=target;return true;}
- void close(){}
-};
-struct {bool present=true;File file;bool exists(const char *){return present;} File open(const char *,const char *){return file;}} LittleFS;
-constexpr int JDR_OK=0,JDR_INP=1;
-bool tftOutput(int16_t,int16_t,uint16_t,uint16_t,uint16_t *){assert(false && "validation must not draw");return false;}
-using Callback=bool (*)(int16_t,int16_t,uint16_t,uint16_t,uint16_t *);
-struct Decoder {
- Callback callback=tftOutput;
- int headerResult=JDR_OK,decodeResult=JDR_OK,drawCalls=0;
- uint16_t width=240,height=240;
- void setCallback(Callback value){callback=value;}
- template<typename FS> int getFsJpgSize(uint16_t *w,uint16_t *h,const char *,FS &){*w=width;*h=height;return headerResult;}
- template<typename FS> int drawFsJpg(int,int,const char *,FS &){++drawCalls;assert(callback(0,0,8,8,nullptr));return decodeResult;}
-} TJpgDec;
-'''
-code += function("displayValidateImage") + "\n"
-code += r'''
 #define F(x) x
 bool backlightOn=false,nightActive=true;
 int savedBrightness=70,appliedBrightness=0;
@@ -144,18 +118,6 @@ int main(){
  displayToggleBacklight();assert(!backlightOn && appliedBrightness==0);
  nightActive=false;displayToggleBacklight();assert(appliedBrightness==70);
  displayToggleBacklight();savedBrightness=0;displayToggleBacklight();assert(appliedBrightness==100);
- assert(!displayValidateImage(nullptr));assert(TJpgDec.drawCalls==0);
- LittleFS.present=false;assert(!displayValidateImage("test.jpg"));LittleFS.present=true;
- std::string validJpeg=LittleFS.file.bytes;
- for(std::string invalid : {std::string("bad"),std::string("\xff\xd8",2),validJpeg.substr(0,validJpeg.size()-1),validJpeg.substr(0,validJpeg.size()-2),std::string("\x00\x00\xff\xd9",4)}) {
-  LittleFS.file.bytes=invalid;assert(!displayValidateImage("test.jpg"));assert(TJpgDec.drawCalls==0);
- }
- LittleFS.file.bytes=validJpeg;
- LittleFS.file.valid=false;assert(!displayValidateImage("test.jpg"));LittleFS.file.valid=true;
- TJpgDec.headerResult=JDR_INP;assert(!displayValidateImage("test.jpg"));assert(TJpgDec.drawCalls==0);TJpgDec.headerResult=JDR_OK;
- TJpgDec.width=0;assert(!displayValidateImage("test.jpg"));assert(TJpgDec.drawCalls==0);TJpgDec.width=240;
- assert(displayValidateImage("test.jpg"));assert(TJpgDec.callback==tftOutput);assert(yields==1);
- TJpgDec.decodeResult=JDR_INP;assert(!displayValidateImage("test.jpg"));assert(TJpgDec.callback==tftOutput);assert(yields==2);
  assert(trimTrailingZeros(1000,0)=="1000");
  assert(trimTrailingZeros(1500,0)=="1500");
  assert(trimTrailingZeros(10000,0)=="10000");
@@ -181,14 +143,10 @@ int main(){
  uint32_t previousHash=focusHash();testRemaining--;assert(focusHash()==previousHash);
  testRemaining=7139;assert(focusHash()!=previousHash);
  testRemaining=3599;previousHash=focusHash();testRemaining--;assert(focusHash()!=previousHash);
- strcpy(displayState.imagePath,"/images/test.jpg");
- displayInvalidateImage("/images/other.jpg"); assert(invalidations==0);
- displayInvalidateImage(nullptr); assert(invalidations==0);
- displayInvalidateImage("/images/test.jpg"); assert(invalidations==1);
  displayServiceTemporaryMessage(); assert(updates==0);
  expired=true; displayServiceTemporaryMessage(); assert(updates==1);
- displayShowDashboard();assert(!displayState.apMode && !displayState.showImage);
- assert(clearedMessages==1 && updates==2 && invalidations==2);
+ displayShowDashboard();assert(!displayState.apMode);
+ assert(clearedMessages==1 && updates==2 && invalidations==1);
  int clearCalls=tft.clearCalls;
  updateWorldDynamicArea();
  assert(clockDynamicSprite.pushes==1 && tft.clearCalls==clearCalls);
@@ -219,4 +177,4 @@ assert "clockDynamicSprite.setColorDepth(1);" in source
 assert "clockDynamicSprite.setBitmapColor(theme.text, dynamicBackground);" in source
 assert "clockDynamicSprite.fillSprite(0);" in source
 assert re.search(r"drawClockTime\(clockDynamicSprite,\s*timeText,\s*dashboardConfig.showSeconds,\s*1,\s*1,\s*0,", source)
-print("Display regressions passed: numeric formatting, glyph coverage, height bounds, progress, image invalidation, overlay expiry, sprite mapping")
+print("Display regressions passed: numeric formatting, glyph coverage, height bounds, progress, cache invalidation, overlay expiry, sprite mapping")

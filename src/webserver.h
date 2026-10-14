@@ -14,7 +14,6 @@ void handleRoot();
 extern ESP8266WebServer server;
 extern int currentBrightness;
 extern int currentTheme;
-extern char currentImage[DISPLAY_PATH_BUFFER_SIZE];
 extern String apPassword; // Random AP password generated at runtime
 extern bool wifiFailsafeMode; // WiFi failsafe mode flag
 

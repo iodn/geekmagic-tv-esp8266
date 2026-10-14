@@ -350,21 +350,7 @@ void maybeEnableClockSprite() {
     logPrint(F("Clock sprite warmup complete"));
 }
 
-void clearImageDirectory() {
-    logPrint("Clearing image directory: " + String(IMAGE_DIR));
-    Dir dir = LittleFS.openDir(IMAGE_DIR);
-    int filesDeleted = 0;
-    while (dir.next()) {
-        String filepath = dir.fileName();
-        if (LittleFS.remove(filepath)) {
-            logPrintf(F("Deleted: %s"), filepath.c_str());
-            filesDeleted++;
-        } else {
-            logPrintf(F("Failed to delete: %s"), filepath.c_str());
-        }
-    }
-    logPrintf(F("Cleared %d files from image directory."), filesDeleted);
-}
+
 
 void setupFilesystem() {
 
@@ -388,11 +374,7 @@ void setupFilesystem() {
 
 
 
-    if (!LittleFS.exists(IMAGE_DIR)) {
 
-        LittleFS.mkdir(IMAGE_DIR);
-
-    }
 
 
 
@@ -400,7 +382,6 @@ void setupFilesystem() {
 
 
 
-    clearImageDirectory(); // Call the new function here
 
 }
 
@@ -547,11 +528,7 @@ void setup() {
         currentTheme = dashboardConfig.theme;
         webserverApplyEffectiveBrightness(true);
 
-        if (appSettings.lastImage[0] != '\0') {
-            logPrint(F("Clearing stale image path after temporary image cleanup"));
-            appSettings.lastImage[0] = '\0';
-            settingsSave(appSettings);
-        }
+
 
 
 
@@ -568,17 +545,13 @@ void setup() {
 
 
 
-        strncpy(currentImage, appSettings.lastImage, sizeof(currentImage));
 
 
 
-        currentImage[sizeof(currentImage) - 1] = '\0'; // Ensure null-termination
 
 
 
-    // Always default to clock display on boot as images are cleared
 
-    displayState.showImage = false;
 
 
 
@@ -701,23 +674,22 @@ void loop() {
                 MDNS.update();
             }
         }
-        // Only update time if not showing an image
-        if (!displayState.showImage) {
-            displayState.apMode = false;  // Ensure AP mode is disabled in normal mode
-            strncpy(displayState.ipInfo, WiFi.localIP().toString().c_str(), sizeof(displayState.ipInfo));
-            displayState.ipInfo[sizeof(displayState.ipInfo) - 1] = '\0';
-        }
+
+        displayState.apMode = false;  // Ensure AP mode is disabled in normal mode
+        strncpy(displayState.ipInfo, WiFi.localIP().toString().c_str(), sizeof(displayState.ipInfo));
+        displayState.ipInfo[sizeof(displayState.ipInfo) - 1] = '\0';
+
     } else {
         // In failsafe mode, show AP credentials on display
-        if (!displayState.showImage) {
-            displayState.apMode = true;
-            strncpy(displayState.apSSID, WIFI_AP_NAME, sizeof(displayState.apSSID));
-            displayState.apSSID[sizeof(displayState.apSSID) - 1] = '\0';
-            strncpy(displayState.apPassword, apPassword.c_str(), sizeof(displayState.apPassword));
-            displayState.apPassword[sizeof(displayState.apPassword) - 1] = '\0';
-            strncpy(displayState.ipInfo, WiFi.softAPIP().toString().c_str(), sizeof(displayState.ipInfo));
-            displayState.ipInfo[sizeof(displayState.ipInfo) - 1] = '\0';
-        }
+
+        displayState.apMode = true;
+        strncpy(displayState.apSSID, WIFI_AP_NAME, sizeof(displayState.apSSID));
+        displayState.apSSID[sizeof(displayState.apSSID) - 1] = '\0';
+        strncpy(displayState.apPassword, apPassword.c_str(), sizeof(displayState.apPassword));
+        displayState.apPassword[sizeof(displayState.apPassword) - 1] = '\0';
+        strncpy(displayState.ipInfo, WiFi.softAPIP().toString().c_str(), sizeof(displayState.ipInfo));
+        displayState.ipInfo[sizeof(displayState.ipInfo) - 1] = '\0';
+
     }
 
     displayServiceTemporaryMessage();
@@ -733,7 +705,6 @@ void loop() {
 
     if (!wifiFailsafeMode &&
         !networkActionBusy &&
-        !displayState.showImage &&
         !displayState.apMode &&
         dashboardConfig.rotationEnabled &&
         millis() - lastPageRotation > static_cast<unsigned long>(dashboardConfig.rotationIntervalSec) * 1000UL) {

@@ -18,7 +18,7 @@ struct Settings {
     uint16_t version;          // Firmware version for compatibility check
     int brightness;
     int theme;
-    char lastImage[64];
+    char reserved[64]; // Preserve EEPROM layout for existing settings.
     long gmtOffset;            // GMT offset in seconds
     char deviceName[SETTINGS_DEVICE_NAME_LENGTH];
     bool valid;

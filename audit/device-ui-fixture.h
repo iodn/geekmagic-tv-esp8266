@@ -128,7 +128,7 @@ DashboardConfig dashboardConfig{};
 DashboardData dashboardData{};
 FeedConfig feedConfig{};
 FeedRuntimeState feedRuntime{};
-struct {char ipInfo[24]="192.168.16.218";bool apMode=false,showImage=false;uint8_t currentPage=0;} displayState;
+struct {char ipInfo[24]="192.168.16.218";bool apMode=false;uint8_t currentPage=0;} displayState;
 uint8_t selectedItemPage=DASHBOARD_PAGE_COUNT,selectedItemIndex=0;
 bool spriteAvailable=true,emptyData=false;
 uint32_t millis(){return 120000;}

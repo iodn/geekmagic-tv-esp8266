@@ -25,6 +25,15 @@ struct {
 } EEPROM;
 struct {std::string message;void println(const char *s){message=s;}} Serial;
 '''
+# The removed picture slot remains padding so existing EEPROM records still load.
+header=(root/'src/settings.h').read_text()
+record=header[header.index('struct Settings {'):header.index('};',header.index('struct Settings {'))+2]
+legacy=record.replace('struct Settings {','struct PreviousSettings {').replace('reserved[64]','lastImage[64]')
+code += '\n#include <cstddef>\nconstexpr int SETTINGS_DEVICE_NAME_LENGTH=32;\n'
+code += record.replace('struct Settings {','struct CurrentSettings {') + '\n' + legacy + '\n'
+code += 'static_assert(sizeof(CurrentSettings)==sizeof(PreviousSettings));\n'
+for field in ('version','brightness','theme','gmtOffset','deviceName','valid','crc'):
+    code += f'static_assert(offsetof(CurrentSettings,{field})==offsetof(PreviousSettings,{field}));\n'
 code += source[start:end]
 code += r'''
 int main(){

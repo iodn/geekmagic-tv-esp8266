@@ -5,8 +5,6 @@
 #include "feeds.h"
 #include "logger.h"
 #include <ESP8266WiFi.h>
-#include <LittleFS.h>
-#include <TJpg_Decoder.h>
 #include <time.h>
 #include <math.h>
 #include <vector>
@@ -90,8 +88,6 @@ enum DisplayRenderMode : uint8_t {
     DISPLAY_MODE_DASHBOARD = 0,
     DISPLAY_MODE_TEMP_MESSAGE,
     DISPLAY_MODE_AP,
-    DISPLAY_MODE_IMAGE,
-    DISPLAY_MODE_IMAGE_ERROR
 };
 
 struct RenderCache {
@@ -101,11 +97,9 @@ struct RenderCache {
     uint8_t theme;
     uint32_t staticHash;
     uint32_t dynamicHash;
-    char imagePath[DISPLAY_PATH_BUFFER_SIZE];
 };
 
-RenderCache renderCache = {false, DISPLAY_MODE_DASHBOARD, 0, 0, 0, 0, {0}};
-uint32_t lastImageAttemptMs = 0;
+RenderCache renderCache = {false, DISPLAY_MODE_DASHBOARD, 0, 0, 0, 0};
 
 struct ClockMetaCache {
     bool valid;
@@ -162,7 +156,6 @@ void hashCString(uint32_t &hash, const char *value) {
 
 void invalidateRenderCache() {
     renderCache.valid = false;
-    renderCache.imagePath[0] = '\0';
     clockMetaCache.valid = false;
     clockMetaCache.metaLine[0] = '\0';
 }
@@ -326,15 +319,7 @@ void hashThemeConfig(uint32_t &hash) {
     hashCString(hash, selection.text);
 }
 
-bool tftOutput(int16_t x, int16_t y, uint16_t width, uint16_t height, uint16_t *bitmap) {
-    yield();
-    if (x >= tft.width() || y >= tft.height()) {
-        return true;
-    }
 
-    tft.pushImage(x, y, width, height, bitmap);
-    return true;
-}
 
 const ThemePalette& activeTheme() {
     static ThemePalette customTheme;
@@ -1771,7 +1756,6 @@ void renderDashboardPageCached() {
         renderCache.theme = themeId;
         renderCache.staticHash = staticHash;
         renderCache.dynamicHash = dynamicHash;
-        renderCache.imagePath[0] = '\0';
         return;
     }
 
@@ -1878,14 +1862,9 @@ void displayInit() {
     tft.invertDisplay(true);
     tft.fillScreen(TFT_BLACK);
 
-    TJpgDec.setJpgScale(1);
-    TJpgDec.setSwapBytes(true);
-    TJpgDec.setCallback(tftOutput);
 
     displayState.line2[0] = '\0';
     displayState.ipInfo[0] = '\0';
-    displayState.showImage = false;
-    displayState.imagePath[0] = '\0';
     displayState.apMode = false;
     displayState.apSSID[0] = '\0';
     displayState.apPassword[0] = '\0';
@@ -1983,7 +1962,6 @@ void displayUpdate() {
         renderCache.theme = themeId;
         renderCache.staticHash = currentHash;
         renderCache.dynamicHash = 0;
-        renderCache.imagePath[0] = '\0';
         return;
     }
 
@@ -1992,26 +1970,7 @@ void displayUpdate() {
         invalidateRenderCache();
     }
 
-    if (displayState.showImage && displayState.imagePath[0] != '\0') {
-        if (renderCache.valid &&
-            strcmp(renderCache.imagePath, displayState.imagePath) == 0 &&
-            (renderCache.mode == DISPLAY_MODE_IMAGE ||
-             (renderCache.mode == DISPLAY_MODE_IMAGE_ERROR && millis() - lastImageAttemptMs < 5000UL))) {
-            return;
-        }
 
-        lastImageAttemptMs = millis();
-        bool rendered = displayRenderImage(displayState.imagePath);
-        renderCache.valid = true;
-        renderCache.mode = rendered ? DISPLAY_MODE_IMAGE : DISPLAY_MODE_IMAGE_ERROR;
-        renderCache.page = 0;
-        renderCache.theme = activeThemeIdValue();
-        renderCache.staticHash = 0;
-        renderCache.dynamicHash = 0;
-        strncpy(renderCache.imagePath, displayState.imagePath, sizeof(renderCache.imagePath) - 1);
-        renderCache.imagePath[sizeof(renderCache.imagePath) - 1] = '\0';
-        return;
-    }
 
     if (displayState.apMode) {
         uint32_t currentHash = apScreenHash();
@@ -2030,7 +1989,6 @@ void displayUpdate() {
         renderCache.theme = themeId;
         renderCache.staticHash = currentHash;
         renderCache.dynamicHash = 0;
-        renderCache.imagePath[0] = '\0';
         return;
     }
 
@@ -2145,16 +2103,11 @@ void displayRenderAPMode() {
 void displayShowDashboard() {
     clearTemporaryMessage();
     displayState.apMode = false;
-    displayState.showImage = false;
     invalidateRenderCache();
     displayUpdate();
 }
 
-void displayInvalidateImage(const char *path) {
-    if (path != nullptr && strcmp(displayState.imagePath, path) == 0) {
-        invalidateRenderCache();
-    }
-}
+
 
 void displayServiceTemporaryMessage() {
     if (temporaryMessageExpired()) {
@@ -2162,86 +2115,9 @@ void displayServiceTemporaryMessage() {
     }
 }
 
-bool displayValidateImage(const char *path) {
-    if (path == nullptr || !LittleFS.exists(path)) {
-        return false;
-    }
 
-    File file = LittleFS.open(path, "r");
-    if (!file) {
-        return false;
-    }
-    bool complete = file.size() >= 4 && file.read() == 0xFF && file.read() == 0xD8 &&
-                    file.seek(file.size() - 2) && file.read() == 0xFF && file.read() == 0xD9;
-    file.close();
-    if (!complete) {
-        return false;
-    }
 
-    uint16_t width = 0;
-    uint16_t height = 0;
-    if (TJpgDec.getFsJpgSize(&width, &height, path, LittleFS) != JDR_OK || width == 0 || height == 0) {
-        return false;
-    }
 
-    struct CallbackRestorer {
-        ~CallbackRestorer() { TJpgDec.setCallback(tftOutput); }
-    } restoreCallback;
-    TJpgDec.setCallback([](int16_t, int16_t, uint16_t, uint16_t, uint16_t *) {
-        yield();
-        return true;
-    });
-    return TJpgDec.drawFsJpg(0, 0, path, LittleFS) == JDR_OK;
-}
-
-bool displayRenderImage(const char *path) {
-    if (!LittleFS.exists(path)) {
-        displayShowMessage(F("Image not found"));
-        return false;
-    }
-
-    File jpgFile = LittleFS.open(path, "r");
-    if (!jpgFile) {
-        displayShowMessage(String(F("Failed to open\n")) + path);
-        return false;
-    }
-
-    uint16_t width = 0;
-    uint16_t height = 0;
-    JRESULT headerResult = TJpgDec.getFsJpgSize(&width, &height, path, LittleFS);
-    if (headerResult != JDR_OK || width == 0 || height == 0) {
-        jpgFile.close();
-        displayShowMessage(String(F("JPEG header error\n")) + String(headerResult));
-        return false;
-    }
-    uint8_t scale = 1;
-    while (scale < 8 && ((width + scale - 1) / scale > DISPLAY_WIDTH ||
-                         (height + scale - 1) / scale > DISPLAY_HEIGHT)) {
-        scale *= 2;
-    }
-    int renderedWidth = min(static_cast<int>((width + scale - 1) / scale), DISPLAY_WIDTH);
-    int renderedHeight = min(static_cast<int>((height + scale - 1) / scale), DISPLAY_HEIGHT);
-    TJpgDec.setJpgScale(scale);
-
-    tft.startWrite();
-    // Clear only uncovered margins so smaller images cannot retain the previous page.
-    if (renderedWidth < DISPLAY_WIDTH) {
-        tft.fillRect(renderedWidth, 0, DISPLAY_WIDTH - renderedWidth, DISPLAY_HEIGHT, TFT_BLACK);
-    }
-    if (renderedHeight < DISPLAY_HEIGHT) {
-        tft.fillRect(0, renderedHeight, renderedWidth, DISPLAY_HEIGHT - renderedHeight, TFT_BLACK);
-    }
-    JRESULT result = TJpgDec.drawFsJpg(0, 0, jpgFile);
-    tft.endWrite();
-    jpgFile.close();
-    TJpgDec.setJpgScale(1);
-
-    if (result != JDR_OK) {
-        displayShowMessage(String(F("JPEG error\n")) + String(result));
-        return false;
-    }
-    return true;
-}
 
 void displayShowMessage(const String &msg) {
     clearTemporaryMessage();
@@ -2262,7 +2138,6 @@ void displayShowTemporaryMessage(const String &msg, uint32_t durationMs) {
 
 void displayShowAPScreen(const char *ssid, const char *password, const char *ip) {
     displayState.apMode = true;
-    displayState.showImage = false;
     strncpy(displayState.apSSID, ssid, sizeof(displayState.apSSID) - 1);
     displayState.apSSID[sizeof(displayState.apSSID) - 1] = '\0';
     strncpy(displayState.apPassword, password, sizeof(displayState.apPassword) - 1);
@@ -2284,13 +2159,7 @@ void displayCycleNextPage(bool smoothTransition) {
         return;
     }
 
-    if (displayState.showImage) {
-        displayState.showImage = false;
-        displayState.currentPage = firstAvailableDashboardPage();
-        invalidateRenderCache();
-        displayUpdate();
-        return;
-    }
+
 
     normalizeDashboardItem();
     uint8_t previousItem = selectedItemIndex;

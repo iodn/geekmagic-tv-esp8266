@@ -37,7 +37,6 @@
 #define BUTTON_LONG_PRESS_MIN_MS 2000
 
 // Filesystem
-#define IMAGE_DIR "/image/"
 
 // Preferences namespace
 #define PREF_NAMESPACE "smartclock"

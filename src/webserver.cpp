@@ -20,13 +20,11 @@ ESP8266WebServer server(WEB_SERVER_PORT);
 
 int currentBrightness = 70;
 int currentTheme = 0;
-char currentImage[DISPLAY_PATH_BUFFER_SIZE];
 
 extern Settings appSettings;
 extern bool otaStarted;
 extern void trackWiFiReconnectAttempt(bool active);
 
-File uploadFile;
 
 namespace {
 
@@ -41,10 +39,6 @@ unsigned long rebootRequestedAtMs = 0;
 bool wifiScanStarted = false;
 bool otaUploadComplete = false;
 String otaUploadError;
-String uploadErrorMessage;
-int uploadStatusCode = 200;
-char uploadTargetPath[DISPLAY_PATH_BUFFER_SIZE] = {0};
-char uploadTempPath[DISPLAY_PATH_BUFFER_SIZE + 4] = {0};
 String authSessionToken;
 unsigned long authSessionLastSeenMs = 0;
 int lastEffectiveBrightness = -1;
@@ -317,102 +311,15 @@ bool parseJsonBody(JsonDocument &doc, String *error = nullptr) {
     return true;
 }
 
-bool imageExtensionAllowed(const String &filename) {
-    String lower = filename;
-    lower.toLowerCase();
-    return lower.endsWith(".jpg") || lower.endsWith(".jpeg");
-}
 
-bool sanitizeImagePath(const String &input, String &normalizedPath, String *error = nullptr) {
-    String candidate = input;
-    candidate.trim();
 
-    if (candidate.length() == 0) {
-        normalizedPath = "";
-        return true;
-    }
 
-    if (!candidate.startsWith(IMAGE_DIR) ||
-        candidate.indexOf("..") >= 0 ||
-        candidate.indexOf('\\') >= 0 ||
-        !imageExtensionAllowed(candidate)) {
-        if (error != nullptr) {
-            *error = F("Invalid image path");
-        }
-        return false;
-    }
 
-    normalizedPath = candidate;
-    return true;
-}
 
-bool sanitizeUploadFilename(const String &input, String &safeFilename, String *error = nullptr) {
-    String filename = input;
-    filename.replace("\\", "/");
-    int separatorIndex = filename.lastIndexOf('/');
-    if (separatorIndex >= 0) {
-        filename = filename.substring(separatorIndex + 1);
-    }
-    filename.trim();
 
-    String sanitized = "";
-    for (size_t index = 0; index < filename.length(); ++index) {
-        char value = filename[index];
-        if (isalnum(static_cast<unsigned char>(value)) || value == '-' || value == '_' || value == '.') {
-            sanitized += value;
-        } else if (value == ' ') {
-            sanitized += '-';
-        }
-    }
 
-    if (sanitized.length() == 0 || sanitized[0] == '.' || !imageExtensionAllowed(sanitized)) {
-        if (error != nullptr) {
-            *error = F("Invalid JPEG filename");
-        }
-        return false;
-    }
 
-    safeFilename = sanitized;
-    return true;
-}
 
-void clearCurrentImageSelection() {
-    currentImage[0] = '\0';
-    displayState.imagePath[0] = '\0';
-    displayState.showImage = false;
-}
-
-bool setCurrentImageSelection(const String &requestedPath, String *error = nullptr) {
-    String imagePath;
-    if (!sanitizeImagePath(requestedPath, imagePath, error)) {
-        return false;
-    }
-
-    if (imagePath.length() >= sizeof(currentImage)) {
-        if (error != nullptr) {
-            *error = F("Image path is too long");
-        }
-        return false;
-    }
-    if (imagePath.length() > 0 && !LittleFS.exists(imagePath)) {
-        if (error != nullptr) {
-            *error = F("Image not found");
-        }
-        return false;
-    }
-
-    if (imagePath.length() == 0) {
-        clearCurrentImageSelection();
-        return true;
-    }
-
-    strncpy(currentImage, imagePath.c_str(), sizeof(currentImage) - 1);
-    currentImage[sizeof(currentImage) - 1] = '\0';
-    strncpy(displayState.imagePath, currentImage, sizeof(displayState.imagePath) - 1);
-    displayState.imagePath[sizeof(displayState.imagePath) - 1] = '\0';
-    displayState.showImage = true;
-    return true;
-}
 
 bool applyRuntimeSettingsObject(JsonObjectConst settings, bool persist, String *error = nullptr) {
     bool changed = false;
@@ -579,7 +486,6 @@ void startQueuedWiFiConnect() {
     wifiConnectTask.ipWaitStartedAtMs = 0;
 
     logPrintf(F("Starting WiFi connect task for SSID: %s"), wifiConnectTask.ssid);
-    displayState.showImage = false;
     displayState.apMode = false;
     wifiFailsafeMode = false;
     displayShowMessage(String("Connecting\n") + wifiConnectTask.ssid);
@@ -680,7 +586,6 @@ void handleAppJson() {
     json += "\"rebootRequired\":" + String(hostnameRestartRequired() ? "true" : "false") + ",";
     json += "\"theme\":" + String(currentTheme) + ",";
     json += "\"brt\":" + String(currentBrightness) + ",";
-    json += "\"img\":\"" + String(currentImage) + "\",";
     json += "\"gmtOffset\":" + String(appSettings.gmtOffset) + ",";
     json += "\"displayDraft\":" + String(displayHasDraftChanges() ? "true" : "false") + ",";
     json += "\"networkBusy\":" + String(webserverHasPendingNetworkAction() ? "true" : "false");
@@ -1072,142 +977,13 @@ void handleFeedSearch() {
     }
 }
 
-void handleFileUpload() {
-    HTTPUpload &upload = server.upload();
 
-    if (upload.status == UPLOAD_FILE_START) {
-        if (uploadFile) {
-            uploadFile.close();
-        }
-        if (uploadTempPath[0] != '\0') {
-            LittleFS.remove(uploadTempPath);
-        }
-        uploadErrorMessage = "";
-        uploadStatusCode = 200;
-        uploadTargetPath[0] = '\0';
-        uploadTempPath[0] = '\0';
 
-        String safeFilename;
-        if (!sanitizeUploadFilename(upload.filename, safeFilename, &uploadErrorMessage)) {
-            uploadStatusCode = 400;
-            return;
-        }
-        String filePath = String(IMAGE_DIR) + safeFilename;
-        if (filePath.length() >= sizeof(uploadTargetPath)) {
-            uploadStatusCode = 400;
-            uploadErrorMessage = "Image filename is too long";
-            return;
-        }
-        copyString(uploadTargetPath, sizeof(uploadTargetPath), filePath.c_str());
-        snprintf(uploadTempPath, sizeof(uploadTempPath), "%s.tmp", uploadTargetPath);
-        uploadFile = LittleFS.open(uploadTempPath, "w");
-        if (!uploadFile) {
-            uploadStatusCode = 500;
-            uploadErrorMessage = "Failed to open upload target";
-        }
-    } else if (upload.status == UPLOAD_FILE_WRITE) {
-        if (uploadStatusCode == 200 && uploadFile &&
-            uploadFile.write(upload.buf, upload.currentSize) != upload.currentSize) {
-            uploadStatusCode = 507;
-            uploadErrorMessage = "Incomplete image write";
-        }
-    } else if (upload.status == UPLOAD_FILE_ABORTED) {
-        if (uploadFile) {
-            uploadFile.close();
-        }
-        if (uploadTempPath[0] != '\0') {
-            LittleFS.remove(uploadTempPath);
-        }
-        uploadStatusCode = 400;
-        uploadErrorMessage = "Upload aborted";
-        uploadTargetPath[0] = '\0';
-        uploadTempPath[0] = '\0';
-    } else if (upload.status == UPLOAD_FILE_END) {
-        if (uploadFile) {
-            uploadFile.flush();
-            if (uploadStatusCode == 200 && uploadFile.size() != upload.totalSize) {
-                uploadStatusCode = 507;
-                uploadErrorMessage = "Incomplete image upload";
-            }
-            uploadFile.close();
-        } else if (uploadStatusCode == 200) {
-            uploadStatusCode = 500;
-            uploadErrorMessage = "Image upload did not start";
-        }
-        if (uploadStatusCode == 200 && !displayValidateImage(uploadTempPath)) {
-            uploadStatusCode = 400;
-            uploadErrorMessage = "Invalid or incomplete JPEG";
-        }
-        if (uploadStatusCode == 200 && !LittleFS.rename(uploadTempPath, uploadTargetPath)) {
-            uploadStatusCode = 500;
-            uploadErrorMessage = "Failed to commit image";
-        }
-        if (uploadStatusCode == 200) {
-            displayInvalidateImage(uploadTargetPath);
-            displayUpdate();
-        } else if (uploadTempPath[0] != '\0') {
-            LittleFS.remove(uploadTempPath);
-        }
-        uploadTempPath[0] = '\0';
-    }
-}
 
-void handleUploadDone() {
-    String message = uploadErrorMessage.length() > 0
-                         ? uploadErrorMessage
-                         : (uploadTargetPath[0] != '\0' ? String(uploadTargetPath) : String("OK"));
-    sendTextResponse(uploadStatusCode, message);
-    uploadErrorMessage = "";
-    uploadStatusCode = 200;
-    uploadTargetPath[0] = '\0';
-}
 
-void handleDelete() {
-    JsonDocument doc;
-    String error;
-    String filePath = server.hasArg("file") ? server.arg("file") : "";
-    if (server.hasArg("plain")) {
-        if (!parseJsonBody(doc, &error)) {
-            sendTextResponse(400, error);
-            return;
-        }
-        filePath = doc["file"] | filePath;
-    }
 
-    String normalizedPath;
-    if (!sanitizeImagePath(filePath, normalizedPath, &error) || normalizedPath.length() == 0) {
-        sendTextResponse(400, error.length() > 0 ? error : "Missing file parameter");
-        return;
-    }
 
-    if (!LittleFS.remove(normalizedPath)) {
-        sendTextResponse(404, F("Not found"));
-        return;
-    }
 
-    if (String(currentImage) == normalizedPath) {
-        clearCurrentImageSelection();
-    }
-
-    sendTextResponse(200, F("Deleted"));
-}
-
-void handleImageShow() {
-    JsonDocument doc;
-    String error;
-    if (!parseJsonBody(doc, &error)) {
-        sendTextResponse(400, error);
-        return;
-    }
-
-    if (!setCurrentImageSelection(doc["path"] | "", &error)) {
-        sendTextResponse(400, error);
-        return;
-    }
-
-    displayUpdate();
-    sendTextResponse(200, F("OK"));
-}
 
 void handleApiUpdate() {
     if (!server.hasArg("plain")) {
@@ -1233,13 +1009,11 @@ void handleApiUpdate() {
         displayState.line2[0] = '\0';
     }
 
-    displayState.showImage = false;
     displayUpdate();
     sendTextResponse(200, F("OK"));
 }
 
 void handleTestCard() {
-    clearCurrentImageSelection();
     displayState.apMode = false;
     displayState.line2[0] = '\0';
     displayState.currentPage = DASHBOARD_PAGE_CLOCK;
@@ -1428,14 +1202,12 @@ void webserverInit() {
     registerProtectedRoute("/space.json", HTTP_GET, handleSpaceJson);
     registerProtectedRoute("/brt.json", HTTP_GET, handleBrtJson);
     registerProtectedRoute("/version.json", HTTP_GET, handleVersionJson);
-    registerProtectedRoute("/delete", HTTP_POST, handleDelete);
     registerProtectedRoute("/log", HTTP_GET, handleLog);
     registerProtectedRoute("/reconfigurewifi", HTTP_POST, handleReconfigureWiFi);
     registerProtectedRoute("/factoryreset", HTTP_POST, handleFactoryReset);
     registerProtectedRoute("/scan", HTTP_GET, handleWiFiScan);
     registerProtectedRoute("/connect", HTTP_POST, handleWiFiConnect);
     registerProtectedRoute("/test", HTTP_POST, handleTestCard);
-    registerProtectedRoute("/image/show", HTTP_POST, handleImageShow);
     registerProtectedRoute("/dashboard/config", HTTP_POST, handleDashboardConfigSave);
     registerProtectedRoute("/dashboard/data", HTTP_POST, handleDashboardDataSave);
     registerProtectedRoute("/dashboard/live", HTTP_POST, handleDashboardLive);
@@ -1453,32 +1225,8 @@ void webserverInit() {
     registerProtectedRoute("/api/dashboard", HTTP_POST, handleDashboardDataSave);
     registerProtectedRoute("/auth/password", HTTP_POST, handleAuthPasswordChange);
 
-    server.on("/image/upload", HTTP_POST,
-              []() {
-                  if (!ensureAuthenticatedRequest()) {
-                      return;
-                  }
-                  handleUploadDone();
-              },
-              []() {
-                  if (!requestHasValidSession()) {
-                      return;
-                  }
-                  handleFileUpload();
-              });
-    server.on("/doUpload", HTTP_POST,
-              []() {
-                  if (!ensureAuthenticatedRequest()) {
-                      return;
-                  }
-                  handleUploadDone();
-              },
-              []() {
-                  if (!requestHasValidSession()) {
-                      return;
-                  }
-                  handleFileUpload();
-              });
+
+
     server.on("/update", HTTP_GET, []() {
         if (!ensureAuthenticatedRequest()) {
             return;

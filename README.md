@@ -1,6 +1,6 @@
 # GeekMagic SmallTV ESP8266 Firmware
 
-Custom ESP8266 firmware for GeekMagic SmallTV-style smart weather clocks with a 240x240 ST7789 display. The firmware provides an authenticated web dashboard, WiFi setup, OTA updates, feed integrations, image display, and selected GeekMagic-style compatibility endpoints.
+Custom ESP8266 firmware for GeekMagic SmallTV-style smart weather clocks with a 240x240 ST7789 display. The firmware provides an authenticated web dashboard, WiFi setup, OTA updates, feed integrations and selected GeekMagic-style compatibility endpoints.
 
 The project has been tested on the GeekMagic SmallTV Ultra ESP8266 variant. Other ESP8266-based variants may require pin or build-flag changes. The ESP32-based SmallTV Pro is not a target for this repository.
 
@@ -27,7 +27,6 @@ Rendered previews use the firmware layout functions and the actual TFT font bitm
 - Day and night display profiles with scheduled brightness and theme options
 - Multi-page display: clock, weather, markets, Home Assistant, focus timer, world clocks, event countdown, quote, and status pages
 - Open-Meteo weather, Finnhub or CoinGecko market feeds, and queued Home Assistant REST polling with per-entity errors and freshness
-- Temporary JPEG upload and rendering
 - Factory reset from the dashboard or by five quick power cycles
 
 ## Device palettes
@@ -82,9 +81,7 @@ The button on GPIO4 advances to the next screen with a short press and toggles t
 
 Do not use OTA for the first installation from stock firmware, ESPHome, or another firmware. Flash the first firmware image over USB serial with a web flasher or local serial tool. OTA is only for devices already running this firmware.
 
-Uploaded images are temporary. The firmware clears `/image/` on boot and resets stale image state.
-
-The device uses flash-backed storage. Avoid automations that write settings or upload images at high frequency.
+The device uses flash-backed storage. Avoid automations that write settings at high frequency.
 
 ## Build Requirements
 
@@ -234,7 +231,7 @@ Dashboard areas:
 - Home Asst: Home Assistant REST feed settings and entity slots
 - Widgets: focus timer, world clocks, event countdown, quote, and status lines
 - Network: WiFi scan, network join, and captive portal restart
-- System: image upload, OTA update, logs, storage status, password rotation, test card, and factory reset
+- System: OTA update, logs, storage status, password rotation, and factory reset
 
 Most display changes can be previewed before saving.
 
@@ -280,7 +277,7 @@ The firmware has several recovery paths:
 
 The boot failure counter is cleared after the firmware has been running for 30 seconds. The power-cycle counter is cleared after 10 seconds of uptime, which prevents normal restarts from accidentally triggering factory reset.
 
-To trigger the power-cycle factory reset, power cycle the device five times in quick succession. The reset clears WiFi credentials, EEPROM settings, authentication data, dashboard data, feed data, and uploaded images.
+To trigger the power-cycle factory reset, power cycle the device five times in quick succession. The reset clears WiFi credentials, EEPROM settings, authentication data, dashboard data, and feed data.
 
 ## Security Model
 
@@ -303,7 +300,6 @@ Use the device only on trusted networks. Do not expose the dashboard or API dire
 | `/dashboard-config.json` | Display and page configuration |
 | `/dashboard-data.json` | Widget data |
 | `/feeds-config.json` | Feed provider configuration |
-| `/image/` | Temporary uploaded JPEG files |
 
 Default settings include brightness `70`, theme `0`, UTC offset `0`, and a generated device name.
 
@@ -380,20 +376,6 @@ Configuration changes return 409 while a feed job is running; wait for `/feeds/j
 
 The `hostName` returned by state endpoints is the active address. Renaming the device also returns `configuredHostName` and `rebootRequired` in `/app.json`; restart the device to apply its new network identity.
 
-Protected image endpoints:
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/image/upload` | Upload JPEG image |
-| POST | `/doUpload` | Compatibility image upload endpoint |
-| POST | `/image/show` | Show uploaded image by path |
-| POST | `/delete` | Delete uploaded image |
-
-Image paths must stay under `/image/` and use `.jpg` or `.jpeg`.
-Use a 240x240 baseline JPEG for the sharpest result. Larger images are reduced
-using the decoder's 1/2, 1/4 or 1/8 scale; any remaining overflow is cropped.
-Smaller images retain their size and have black margins.
-
 Protected network and system endpoints:
 
 | Method | Endpoint | Description |
@@ -417,15 +399,6 @@ curl -b cookies.txt \
   -X POST http://<device-ip>/dashboard/live \
   -H "Content-Type: application/json" \
   -d '{"settings":{"brightness":55,"gmtOffset":3600}}'
-
-curl -b cookies.txt \
-  -F "file=@image.jpg" \
-  http://<device-ip>/image/upload
-
-curl -b cookies.txt \
-  -X POST http://<device-ip>/image/show \
-  -H "Content-Type: application/json" \
-  -d '{"path":"/image/image.jpg"}'
 
 curl -b cookies.txt \
   -F "update=@.pio/build/nodemcuv2/firmware.bin" \
@@ -463,17 +436,17 @@ Main modules:
 | `main.cpp` | Startup, WiFi, recovery, main loop, deferred mDNS/OTA/time services |
 | `settings.cpp` | EEPROM settings, validation, migration, boot counters |
 | `auth.cpp` | Admin password generation, hashing, verification, password rotation |
-| `webserver.cpp` | HTTP routes, session checks, uploads, OTA, network actions |
+| `webserver.cpp` | HTTP routes, session checks, OTA, network actions |
 | `webui.h` | Embedded dashboard HTML, CSS, and JavaScript |
 | `dashboard.cpp` | Display configuration, widget data, live preview, persistence |
 | `feeds.cpp` | Weather, market, and Home Assistant feed configuration and polling |
-| `display.cpp` | ST7789 rendering, pages, brightness, images, setup screens |
+| `display.cpp` | ST7789 rendering, pages, brightness, setup screens |
 | `button.cpp` | Button debounce and short/long press handling |
 | `logger.cpp` | Serial and in-memory logs |
 
 The ESP8266 runtime is cooperative. Outgoing HTTP/TLS feed work runs on a separate 4 KB continuation stack and yields back to the main loop during network waits and JSON streaming. Requests have a 24-second overall deadline and a 128 KiB response limit. The ESP8266 platform is pinned to 4.2.1 (Arduino core 3.1.2) because this worker uses the core continuation API. Review that API and cancellation behavior before upgrading the platform.
 
-Setup mode keeps its AP and wildcard DNS available while station connection attempts progress without waiting in the main loop. Saved credentials are replaced only after a requested connection succeeds. Configuration and image files are validated before atomic replacement. Long operations should yield, avoid large allocations, and avoid excessive filesystem writes.
+Setup mode keeps its AP and wildcard DNS available while station connection attempts progress without waiting in the main loop. Saved credentials are replaced only after a requested connection succeeds. Configuration files are validated before atomic replacement. Long operations should yield, avoid large allocations, and avoid excessive filesystem writes.
 
 ## Contributing
 
@@ -506,7 +479,7 @@ WEB_ASSET_HEADER=.pio/build/nodemcuv2/generated/webui_gzip.h node audit/browser-
 `PLAYWRIGHT_MODULE_PATH` can point to an external Playwright installation, and
 `BROWSER_EXECUTABLE` can select an existing Chromium executable.
 
-These checks use current source functions, network/filesystem mocks, and the real JPEG decoder. They do not contact a device. For authenticated API checks on a device with no existing display draft:
+These checks use current source functions, network/filesystem mocks, and display rendering. They do not contact a device. For authenticated API checks on a device with no existing display draft:
 
 ```bash
 SMARTCLOCK_PASSWORD='YOUR_ADMIN_PASSWORD' ./test-api.sh <device-ip>

@@ -29,7 +29,6 @@ struct {std::string body;bool hasBody=true;std::map<std::string,String> args;boo
 struct Settings {int brightness=70,theme=0;long gmtOffset=0;char deviceName[32]="configured-clock";} appSettings,savedAppSettings;
 bool savedSettingsReady=false;
 int currentBrightness=70,currentTheme=0,saves=0,ntpCalls=0,brightnessCalls=0;
-char currentImage[32]="";
 struct {int scanResult=WIFI_SCAN_RUNNING,startResult=WIFI_SCAN_RUNNING,scanCalls=0,deletes=0;String hostname(){return "active-clock";}void scanDelete(){++deletes;}int scanNetworks(bool asynchronous,bool hidden){assert(asynchronous&&hidden);++scanCalls;return startResult;}int scanComplete(){return scanResult;}const char*SSID(int index){return index==0?"network-one":"network-two";}int RSSI(int index){return -50-index;}int encryptionType(int){return 4;}} WiFi;
 struct {bool running=false,error=false,beginSuccess=true,writeSuccess=true,endSuccess=true;int begins=0,ends=0;bool begin(uint32_t){++begins;running=beginSuccess;error=!beginSuccess;return beginSuccess;}size_t write(uint8_t*,size_t n){return writeSuccess?n:n-1;}bool end(bool finalize=false){++ends;running=false;if(!finalize){error=true;return false;}error=!endSuccess;return endSuccess;}bool isRunning(){return running;}bool hasError(){return error;}void printError(int){}} Update;
 int Serial=0;
@@ -63,7 +62,7 @@ bool authUpdatePassword(const String&oldPassword,const String&newPassword,String
 '''
 for name in ['webserverHasPendingNetworkAction','copyString','copyConfiguredHostname','copyActiveHostname','hostnameRestartRequired','copyDefaultDeviceName','queueRestart','clearSessionState','clearSessionCookie','parseJsonBody','handleAuthPasswordChange','captureSavedSettings','applyRuntimeSettingsObject','handleAppJson','handleVersionJson','handleApiUpdate','handleWiFiScan','handleFeedsSync','handleFeedJob','handleOTAUpload','handleOTADone']:
     if name=='handleApiUpdate':
-        code+='\nstruct {char line2[32]="original";bool showImage=true;} displayState;\nint updates=0;void displayUpdate(){++updates;}\n'
+        code+='\nstruct {char line2[32]="original";} displayState;\nint updates=0;void displayUpdate(){++updates;}\n'
     code+='\n'+extract(name)
 code+=r'''
 int main(){

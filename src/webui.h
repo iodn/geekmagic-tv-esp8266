@@ -529,11 +529,6 @@ input[type="range"] {
     width: 100%;
     accent-color: var(--accent);
 }
-input[type="file"] {
-    width: 100%;
-    min-width: 0;
-    max-width: 100%;
-}
 .slider-row {
     display: grid;
     grid-template-columns: 1fr auto;
@@ -1760,27 +1755,7 @@ input[type="submit"]:disabled,
 
     <section id="panel-system" class="tab-panel">
         <div class="system-grid">
-            <section class="panel">
-                <div class="panel-header">
-                    <h2 class="panel-title">Image</h2>
-                </div>
-                <div class="field">
-                    <label for="fileUpload">JPEG</label>
-                    <input type="file" accept="image/jpeg" id="fileUpload">
-                </div>
-                <div class="button-row" style="margin-top: 14px;">
-                    <button type="button" onclick="uploadImage()">Upload</button>
-                </div>
-                <div class="panel-note" id="uploadStatus">Choose a JPEG to upload.</div>
-                <div class="field" style="margin-top: 14px;">
-                    <label for="imagePath">Path</label>
-                    <input type="text" id="imagePath" placeholder="/image/poster.jpg">
-                </div>
-                <div class="button-row" style="margin-top: 14px;">
-                    <button type="button" class="ghost" onclick="displayImage()">Show</button>
-                    <button type="button" class="ghost" onclick="previewTestCard()">Dashboard</button>
-                </div>
-            </section>
+
 
             <section class="panel">
                 <div class="panel-header">
@@ -2561,7 +2536,6 @@ function applyAppState(appState) {
     setDeviceIdentity(appState);
     setValue("deviceName", appState.deviceName ?? appState.defaultDeviceName ?? "");
     setValue("brightness", appState.brt ?? 70);
-    setValue("imagePath", appState.img ?? "");
     applyTimezoneToUI(typeof appState.gmtOffset === "number" ? appState.gmtOffset : 0);
     updateBrightnessLabel();
     updateDeviceIdentityPreview();
@@ -3360,72 +3334,11 @@ async function syncFeeds(scope = "all") {
     }
 }
 
-async function uploadImage() {
-    const fileInput = document.getElementById("fileUpload");
-    const file = fileInput.files && fileInput.files[0];
-    if (!file) {
-        document.getElementById("uploadStatus").textContent = "Choose a JPEG first.";
-        setSyncState("Pick image", "error");
-        return;
-    }
 
-    try {
-        const formData = new FormData();
-        formData.append("file", file);
-        setSyncState("Uploading", "pending");
 
-        const response = await request("/image/upload", {
-            method: "POST",
-            body: formData
-        });
-        const message = await response.text();
-        if (!response.ok) {
-            throw new Error(message || "Upload failed");
-        }
 
-        document.getElementById("uploadStatus").textContent = "Upload complete.";
-        if (message && message.startsWith("/image/")) {
-            document.getElementById("imagePath").value = message;
-        }
-        fileInput.value = "";
-        setSyncState("Uploaded", "saved");
-    } catch (error) {
-        console.error(error);
-        document.getElementById("uploadStatus").textContent = "Upload failed.";
-        setSyncState("Upload failed", "error");
-    }
-}
 
-function displayImage() {
-    const imagePath = document.getElementById("imagePath").value.trim();
-    postJson("/image/show", { path: imagePath })
-        .then((response) => {
-            if (!response.ok) {
-                return response.text().then((message) => {
-                    throw new Error(message || "Image update failed");
-                });
-            }
-            setSyncState("Image", "saved");
-        })
-        .catch((error) => {
-            console.error(error);
-            setSyncState("Image failed", "error");
-        });
-}
 
-function previewTestCard() {
-    request("/test", { method: "POST" })
-        .then((response) => {
-            if (!response.ok) {
-                throw new Error("Test failed");
-            }
-            setSyncState("Preview", "live");
-        })
-        .catch((error) => {
-            console.error(error);
-            setSyncState("Test failed", "error");
-        });
-}
 
 function reconfigureWiFi() {
     if (!confirm("Clear saved WiFi and restart into AP mode?")) {

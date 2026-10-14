@@ -128,17 +128,17 @@ def exercise_api_handler():
 #include <cstring>
 #include <string>
 struct {std::string body;bool hasBody=true;bool hasArg(const char*){return hasBody;}std::string arg(const char*){return body;}} server;
-struct {char line2[32]="original";bool showImage=true;} displayState;
+struct {char line2[32]="original";} displayState;
 int status=0,updates=0;
 void sendTextResponse(int code,const char*){status=code;}
 void displayUpdate(){++updates;}
 ''' + handler + r'''
 int main(){
  for(const char*body:{"{\"line1\":123}","{\"line1\":true}","{\"line1\":[]}","{\"line1\":{}}","invalid json"}){
-  server.body=body;handleApiUpdate();assert(status==400);assert(std::string(displayState.line2)=="original");assert(displayState.showImage);assert(updates==0);
+  server.body=body;handleApiUpdate();assert(status==400);assert(std::string(displayState.line2)=="original");assert(updates==0);
  }
  server.hasBody=false;handleApiUpdate();assert(status==400);assert(updates==0);server.hasBody=true;
- server.body=R"({"line1":"valid"})";handleApiUpdate();assert(status==200);assert(std::string(displayState.line2)=="valid");assert(!displayState.showImage);assert(updates==1);
+ server.body=R"({"line1":"valid"})";handleApiUpdate();assert(status==200);assert(std::string(displayState.line2)=="valid");assert(updates==1);
  server.body=R"({"line1":null})";handleApiUpdate();assert(status==200);assert(displayState.line2[0]==0);assert(updates==2);
  server.body=R"({"line1":"abcdefghijklmnopqrstuvwxyz0123456789"})";handleApiUpdate();assert(status==200);assert(strlen(displayState.line2)==31);assert(displayState.line2[31]==0);
 }

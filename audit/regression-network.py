@@ -37,7 +37,7 @@ struct {
  int status(){return stationStatus;}IPAddress localIP(){return ip;}IPAddress softAPIP(){return IPAddress(192,168,4,1);}
 } WiFi;
 struct {int starts=0,stops=0;bool active=false;void start(int port,const char*domain,IPAddress){assert(port==53);assert(std::string(domain)=="*");++starts;active=true;}void stop(){++stops;active=false;}} setupDns;
-struct {bool apMode=false,showImage=false;char ipInfo[24]={};} displayState;
+struct {bool apMode=false;char ipInfo[24]={};} displayState;
 struct {char deviceName[32]="clock";} appSettings;
 void settingsBuildHostname(const char*name,char*buffer,size_t n){snprintf(buffer,n,"%s",name);}
 void displayShowAPScreen(const char*,const char*,const char*){displayState.apMode=true;}
