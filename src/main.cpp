@@ -20,7 +20,6 @@ Settings appSettings;
 unsigned long lastDisplayUpdate = 0;
 unsigned long lastDisplayProfileCheck = 0;
 unsigned long lastPageRotation = 0;
-unsigned long lastWiFiCheck = 0;
 unsigned long lastWiFiReconnectAttempt = 0;
 bool wifiFailsafeMode = false;  // True when in AP-only mode after connection failures
 String apPassword = "";  // Generated random AP password

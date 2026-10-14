@@ -1051,7 +1051,7 @@ bool httpGetJson(const String &url,
         if (error) *error = "Low heap, retrying later";
         return false;
     }
-    std::unique_ptr<FeedTlsClient> client(new FeedTlsClient());
+    std::unique_ptr<FeedTlsClient> client(new (std::nothrow) FeedTlsClient());
     if (!client) {
         if (error) *error = "TLS client allocation failed";
         return false;
