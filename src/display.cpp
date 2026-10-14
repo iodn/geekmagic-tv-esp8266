@@ -1476,11 +1476,15 @@ void updateWorldDynamicArea() {
             continue;
         }
 
-        tft.fillRect(20, y, 118, 26, theme.surface);
+        const int timeFonts[] = {FONT_TITLE, FONT_BODY, FONT_LABEL};
+        String timeText = formatWorldTime(clock.offsetSeconds);
+        int timeFont = chooseCanvasFittingFont(tft, timeText, 118, timeFonts,
+                                               sizeof(timeFonts) / sizeof(timeFonts[0]), 48);
+        tft.fillRect(20, y, 118, 48, theme.surface);
         tft.setTextDatum(TL_DATUM);
-        tft.setTextFont(FONT_TITLE);
+        tft.setTextFont(timeFont);
         tft.setTextColor(theme.text, theme.surface);
-        tft.drawString(formatWorldTime(clock.offsetSeconds), 20, y, FONT_TITLE);
+        tft.drawString(timeText, 20, y, timeFont);
         y += 72;
     }
 }

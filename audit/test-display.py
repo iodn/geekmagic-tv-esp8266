@@ -35,6 +35,8 @@ struct String : StringBase {
 };
 constexpr int FONT_INFO=1,FONT_LABEL=2,FONT_BODY=4,FONT_TITLE=6,FONT_HUGE=7,DISPLAY_HEIGHT=240;
 struct Canvas {
+ int clearHeight=0;
+ void fillRect(int,int,int,int h,uint16_t){clearHeight=h;}
  int textWidth(const String &s,int font){return s.length()*(font==6 ? 27 : font==7 ? 32 : font==4 ? 16 : font==2 ? 8 : 6);}
  int currentFont=1,lastY=0,lastFont=0;String lastText;uint16_t lastColor=0;
  void setTextDatum(int){} void setTextFont(int font){currentFont=font;}
@@ -55,7 +57,7 @@ for name in ("trimTrailingZeros", "fontSupportsText", "chooseCanvasFittingFont",
     code += function(name) + "\n"
 code += r'''
 constexpr int TC_DATUM=1,TL_DATUM=2;
-struct ThemePalette {uint16_t text=1,muted=2,accent=3,accentSoft=4,warning=5;} theme;
+struct ThemePalette {uint16_t text=1,muted=2,accent=3,accentSoft=4,warning=5,surface=6;} theme;
 const ThemePalette &activeTheme(){return theme;}
 struct HomeAssistantSlotData {bool hasData=true,numeric=true,stale=false;char state[24]="123",lastError[64]={};uint32_t lastSuccessMs=0;} slot;
 const HomeAssistantSlotData *feedsHomeAssistantSlotData(uint8_t){return &slot;}
@@ -70,12 +72,17 @@ void drawRoundedPanel(int,int,int,int,uint16_t,uint16_t){}
 String lastAdaptiveText;
 void drawAdaptiveText(const String &text,int,int,int,uint8_t,const int *,size_t,uint16_t,uint16_t){lastAdaptiveText=text;}
 void drawAdaptiveBadge(int,int,int,int,const String &,const int *,size_t,uint16_t,uint16_t){}
+struct WorldClockData {bool enabled=true;char label[16]="Tokyo";long offsetSeconds=0;};
+constexpr int DASHBOARD_WORLD_CLOCK_COUNT=2;
+struct {WorldClockData worldClocks[2];} dashboardData;
+String formatWorldTime(long){return "23:59";}
 using std::max;
 '''
 # Adapt the Arduino integer String constructor and rounded accent primitive for host mocks.
 code = code.replace(" using StringBase::StringBase;", " using StringBase::StringBase;\n String(uint32_t n){assign(std::to_string(n));}")
 code = code.replace(" void setTextDatum(int)", " void fillRoundRect(int,int,int,int,int,uint16_t){}\n void setTextDatum(int)")
 code += function("drawHomeAssistantCard") + "\n"
+code += function("updateWorldDynamicArea") + "\n"
 code += r'''
 int yields=0;
 void yield(){++yields;}
@@ -155,6 +162,11 @@ int main(){
  displayInvalidateImage("/images/test.jpg"); assert(invalidations==1);
  displayServiceTemporaryMessage(); assert(updates==0);
  expired=true; displayServiceTemporaryMessage(); assert(updates==1);
+ updateWorldDynamicArea();
+ assert(tft.lastY==142);
+ assert(tft.textWidth(tft.lastText,tft.lastFont)<=118);
+ assert(tft.fontHeight(tft.lastFont)<=tft.clearHeight);
+ assert(tft.lastY+tft.clearHeight<=220);
 }
 '''
 with tempfile.TemporaryDirectory() as folder:
