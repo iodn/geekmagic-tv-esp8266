@@ -1186,9 +1186,9 @@ void hashHomeAssistantData(uint32_t &hash) {
         hashCString(hash, slotConfig.unit);
 
         const HomeAssistantSlotData *slot = feedsHomeAssistantSlotData(index);
-        bool hasData = slot != nullptr;
+        bool hasData = slot != nullptr && slot->hasData;
         hashValue(hash, hasData);
-        if (!hasData) {
+        if (slot == nullptr) {
             continue;
         }
 
@@ -1752,6 +1752,9 @@ void drawHomeAssistantCard(int x,
     if (slot != nullptr && slot->hasData) {
         stateText = safeCString(slot->state);
         stateColor = slot->numeric ? theme.text : theme.accent;
+    } else if (slot != nullptr && slot->lastError[0] != '\0') {
+        stateText = "Error";
+        stateColor = theme.warning;
     } else if (!feedsHomeAssistantConfigured()) {
         stateText = "Add";
         stateColor = theme.muted;

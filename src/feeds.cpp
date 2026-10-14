@@ -2331,7 +2331,8 @@ const HomeAssistantSlotData* feedsHomeAssistantSlotData(uint8_t index) {
         return nullptr;
     }
 
-    return feedRuntime.homeAssistant.slots[index].hasData
+    const HomeAssistantSlotData &slot = feedRuntime.homeAssistant.slots[index];
+    return slot.enabled && (slot.hasData || slot.lastError[0] != '\0')
                ? &feedRuntime.homeAssistant.slots[index]
                : nullptr;
 }

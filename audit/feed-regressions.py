@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def function(name):
     source = (ROOT / "src/feeds.cpp").read_text()
-    match = re.search(r"^(?:String|bool|void|FeedSearchStatus) " + name + r"\([^;{]*\)\s*\{", source, re.M)
+    match = re.search(r"^(?:String|bool|void|FeedSearchStatus|const HomeAssistantSlotData\*) " + name + r"\([^;{]*\)\s*\{", source, re.M)
     assert match, name
     begin = source.index("{", match.start())
     end, depth = begin + 1, 1
@@ -164,7 +164,7 @@ void parserWaitingTest() {
     parserDone = true;
 }
 '''
-    for name in ["copyString", "parseFloatStrict", "trimTrailingZerosString", "groupThousandsString", "formatHomeAssistantNumericState", "homeAssistantSlotConfigured", "syncHomeAssistant", "runFeedJob", "pumpFeedJob", "feedsBusy", "feedsCancelJobs", "feedsWeatherSearchResult"]:
+    for name in ["copyString", "parseFloatStrict", "trimTrailingZerosString", "groupThousandsString", "formatHomeAssistantNumericState", "homeAssistantSlotConfigured", "syncHomeAssistant", "feedsHomeAssistantSlotData", "runFeedJob", "pumpFeedJob", "feedsBusy", "feedsCancelJobs", "feedsWeatherSearchResult"]:
         code += function(name) + "\n"
     code += r'''
 void partialTest() {
@@ -204,6 +204,20 @@ int main() {
     while (feedRuntime.homeAssistant.syncing);
     assert(feedRuntime.homeAssistant.slots[0].hasData);
     assert(feedRuntime.homeAssistant.slots[0].stale);
+    // First-poll failures must remain observable without a cached state.
+    assert(feedsHomeAssistantSlotData(1) == &feedRuntime.homeAssistant.slots[1]);
+    assert(!feedRuntime.homeAssistant.slots[1].hasData);
+    assert(feedsHomeAssistantSlotData(0) == &feedRuntime.homeAssistant.slots[0]);
+    assert(feedsHomeAssistantSlotData(2) == nullptr);
+    assert(feedsHomeAssistantSlotData(HOME_ASSISTANT_SLOT_COUNT) == nullptr);
+    assert(feedsHomeAssistantSlotData(255) == nullptr);
+    auto &unused = feedRuntime.homeAssistant.slots[2];
+    unused.enabled=true;
+    assert(feedsHomeAssistantSlotData(2) == nullptr);
+    strcpy(unused.lastError, "HTTP 401");
+    assert(feedsHomeAssistantSlotData(2) == &unused);
+    unused.enabled=false;
+    assert(feedsHomeAssistantSlotData(2) == nullptr);
     pendingSyncMask = kWeatherJob;
     unsigned heartbeat = 0;
     while (feedsBusy()) {
