@@ -1445,7 +1445,7 @@ void updateFocusDynamicArea() {
     if (dashboardData.focus.durationMinutes > 0) {
         uint32_t totalSeconds = static_cast<uint32_t>(dashboardData.focus.durationMinutes) * 60UL;
         uint32_t boundedRemaining = remainingSeconds > 0 ? static_cast<uint32_t>(remainingSeconds) : 0U;
-        uint32_t elapsedSeconds = (boundedRemaining < totalSeconds) ? (totalSeconds - boundedRemaining) : totalSeconds;
+        uint32_t elapsedSeconds = (boundedRemaining < totalSeconds) ? (totalSeconds - boundedRemaining) : 0U;
         uint32_t safeTotal = totalSeconds > 0 ? totalSeconds : 1U;
         int filledWidth = map(elapsedSeconds, 0, safeTotal, 0, progressWidth);
         filledWidth = constrain(filledWidth, 0, progressWidth);
