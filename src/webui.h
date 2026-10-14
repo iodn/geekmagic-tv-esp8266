@@ -3137,16 +3137,17 @@ async function resetDashboardDefaults() {
 
     window.clearTimeout(liveTimer);
     liveTimer = 0;
+    const generation = editGeneration;
 
     try {
         const response = await queueOperation(() => request("/dashboard/reset", { method: "POST" }));
         if (!response.ok) {
             throw new Error(await response.text());
         }
-        dirty = false;
+        dirty = editGeneration !== generation;
         updateActionButtons();
-        await loadAllState();
-        setSyncState("Saved", "saved");
+        if (!dirty) await loadAllState();
+        setSyncState(dirty ? "Pending" : "Saved", dirty ? "pending" : "saved");
     } catch (error) {
         console.error(error);
         setSyncState("Reset failed", "error");
@@ -3160,16 +3161,17 @@ async function resetFeedDefaults() {
 
     window.clearTimeout(feedLiveTimer);
     feedLiveTimer = 0;
+    const generation = feedEditGeneration;
 
     try {
         const response = await queueOperation(() => request("/feeds/reset", { method: "POST" }));
         if (!response.ok) {
             throw new Error(await response.text());
         }
-        feedDirty = false;
+        feedDirty = feedEditGeneration !== generation;
         updateActionButtons();
-        await loadFeedStateOnly();
-        setSyncState("Saved", "saved");
+        if (!feedDirty) await loadFeedStateOnly();
+        setSyncState(feedDirty ? "Feeds pending" : "Saved", feedDirty ? "pending" : "saved");
     } catch (error) {
         console.error(error);
         setSyncState("Feed reset failed", "error");

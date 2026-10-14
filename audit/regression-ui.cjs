@@ -22,12 +22,12 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
         buildLivePayload: () => ({settings: {brightness}}), buildFeedPayload: () => ({weather: {label: String(brightness)}}),
         postJson: async (url, body) => {payload = body; return new Promise(resolve => {release = resolve;});},
         request: async () => ({ok: true, json: async () => ({hostName: 'active-name', rebootRequired: true})}),
-        window: {clearTimeout() {}, setTimeout(resolve) {resolve();}}, console,
+        confirm: () => true, window: {clearTimeout() {}, setTimeout(resolve) {resolve();}}, console,
         setSyncState() {}, updateActionButtons() {}, setDeviceIdentity() {},
         loadFeedStateOnly() {throw new Error('New edits must not be overwritten by hydration');},
         loadAllState() {throw new Error('New edits must not be overwritten by hydration');}
     });
-    vm.runInContext(['queueOperation','buildWidgetPayload','flushLiveSync','flushFeedPreview','commitState','commitFeedConfig','discardState','discardFeedConfig','postFeedConfig','waitQueuedResponse'].map(extract).join('\n'), context);
+    vm.runInContext(['queueOperation','buildWidgetPayload','flushLiveSync','flushFeedPreview','commitState','commitFeedConfig','discardState','discardFeedConfig','postFeedConfig','waitQueuedResponse','resetDashboardDefaults','resetFeedDefaults'].map(extract).join('\n'), context);
     assert.equal(vm.runInContext('JSON.stringify(buildWidgetPayload())', context), '{}', 'Unrelated settings omit timer fields');
     assert.equal(vm.runInContext('JSON.stringify(buildWidgetPayload({focus:{remainingSeconds:1500,running:false},event:{remainingSeconds:3600}}))', context), '{"focus":{"running":false}}', 'Pause omits stored remainder');
     let saving = vm.runInContext('commitState()', context); await tick();
@@ -40,6 +40,13 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
     saving = vm.runInContext('commitFeedConfig()', context); await tick();
     vm.runInContext('feedEditGeneration++; feedDirty=true', context);release({ok: true});await saving;
     assert.equal(context.feedDirty, true, 'A newer feed edit stays unsaved');
+    context.request=async () => new Promise(resolve => {release=resolve;});
+    saving=vm.runInContext('resetDashboardDefaults()',context);await tick();
+    vm.runInContext('editGeneration++; dirty=true',context);release({ok:true});await saving;
+    assert.equal(context.dirty,true,'Reset preserves edits made while pending');
+    saving=vm.runInContext('resetFeedDefaults()',context);await tick();
+    vm.runInContext('feedEditGeneration++; feedDirty=true',context);release({ok:true});await saving;
+    assert.equal(context.feedDirty,true,'Feed reset preserves edits made while pending');
     const calls=[];let releaseFirst;
     context.first = () => {calls.push('preview'); return new Promise(resolve => {releaseFirst=resolve;});};
     context.second = () => {calls.push('discard');};
