@@ -1,0 +1,440 @@
+GeekMagic firmware audit
+Reviewed 2026-10-14 at d5f1386
+
+Scope and evidence
+
+Reviewed startup and recovery, EEPROM and filesystem persistence, authentication,
+HTTP routes and uploads, all feed providers, display rendering and caching, button
+handling, logging, and the embedded dashboard JavaScript. Checked Home Assistant
+against its official REST and authentication documentation and current core source.
+Firmware behavior has not been changed by this audit.
+
+P1 means fix first: incorrect values, lost configuration, crashes, broken recovery,
+or credential rotation. P2 means a functional defect with narrower conditions.
+P3 means a smaller correctness or maintenance issue. Security risks and optional
+optimizations appear separately; they are not claims of a demonstrated exploit.
+
+PlatformIO build succeeded for nodemcuv2 with ESP8266 Arduino core 3.1.2,
+TFT_eSPI 2.5.43, WiFiManager 2.0.17, ArduinoJson 7.4.3, TJpg_Decoder 1.1.0.
+Reported RAM: 54,208 / 81,920 bytes (66.2%). Reported flash:
+892,615 / 1,044,464 bytes (85.5%). These are build metrics, not runtime free heap
+or a measured latency/fragmentation profile. Dependencies use version ranges.
+Warnings concerned SPIFFS defaults in TJpg_Decoder, outside this patch scope.
+
+The host diagnostics extract current functions from source. C++ checks use a
+small Arduino String substitute, real installed ArduinoJson, and mocked network,
+clock and storage boundaries. The browser check executes the real save function
+with a delayed mock response. These reproduce logic and failure paths, not actual
+radio, TLS, flash hardware or screen output. No physical device was contacted.
+
+Run:
+  pio run
+  python3 audit/reproduce.py
+  node audit/reproduce-ui.cjs
+
+The diagnostic scripts print observed behavior; exit zero is not a declaration
+that firmware bugs are fixed. Temporary test files are removed automatically.
+
+Findings in priority order
+
+1. P1 Integer formatting removes significant zeros.
+   src/feeds.cpp:1407,1449; src/display.cpp:361,872
+   Both trimming helpers remove terminal zeros without first requiring a decimal
+   point. For numbers >= 1000, formatting uses zero decimal places. A sensor or
+   market value of 1000 becomes 1; 1500 becomes 15. Reproduced: both Home Assistant
+   and market formatting returned 1 for 1000.
+   Fix: strip zeros only from the fractional part. Add boundary cases for 1000,
+   1500, 10000, negative integers, fractional zeros, and zero.
+
+2. P1 Unrelated dashboard edits restart focus and event countdowns.
+   src/webui.h:2552,2822,2890; src/dashboard.cpp:731,790,963
+   Every preview/save resends widget remainingSeconds, including when changing
+   brightness, name or theme. The UI loads the stored starting duration, not the
+   current remainder, and omits updatedAtEpoch. Applying that payload resets the
+   timestamp to now. Pausing through the UI also supplies remainingSeconds, so
+   the backend's elapsed-time pause branch is bypassed.
+   Reproduced: focus 900 -> 1500 seconds, event 3000 -> 3600 seconds after the
+   same stored durations were resent. Fix: send only changed widget fields;
+   preserve countdown anchors for unrelated edits and calculate remainder on pause.
+
+3. P1 Short JSON writes can replace valid settings and report success.
+   src/auth.cpp:118; src/dashboard.cpp:494; src/feeds.cpp:875
+   Writers accept serializeJson(...) > 0. A full filesystem can accept the first
+   bytes and reject the rest; that positive count is treated as complete, and the
+   old file is removed. Reproduced with a 12-byte sink: save returned true and
+   replaced the old config with {"token":"ab, which is invalid JSON.
+   Fix: reject document allocation overflow, require the expected complete byte
+   count, and keep the old file until the completed replacement is ready.
+
+4. P1 Entering initial failsafe mode erases the station credentials.
+   src/main.cpp:311,379; src/webserver.cpp:558
+   The installed core implements WiFi.disconnect(true) as disconnect(true,true):
+   it clears station SSID/password, in RAM or flash according to persistent mode.
+   setupWiFi uses it after failing saved credentials, then monitorWiFi checks
+   WiFi.SSID before retrying. Clearing the SSID prevents that automatic retry.
+   The connection-task failure path also clears credentials and can remove the
+   previous network rather than restoring it.
+   Fix: use disconnect with eraseCredentials=false for recovery; erase only for
+   explicit reset/reconfigure operations. Preserve the previous network when a
+   newly requested network fails.
+
+5. P1 Password rotation leaves ArduinoOTA using the previous password.
+   src/main.cpp:451; src/webserver.cpp:745; src/auth.cpp:246
+   OTA gets a copied hash at startup. The password-change route changes auth
+   storage and the browser session only. The installed ArduinoOTA setter refuses
+   changes after initialization, and its end() does not clear the stored password.
+   Thus a simple setter call or end/begin is insufficient: the old OTA credential
+   remains usable until reboot while the new one is rejected by that service.
+   Fix: after a successfully persisted password change, disable the old service
+   and reboot after returning the response, or implement supported reinitialization
+   that actually replaces the hash. Test both old and new OTA credentials.
+
+6. P1 A non-string compatibility API field can crash the device.
+   src/webserver.cpp:1093
+   /api/update checks only !doc["line1"].isNull(), then passes as<const char*>()
+   to strncpy. For authenticated JSON {"line1":123}, that conversion returns
+   nullptr. Reproduced the ArduinoJson conversion; the subsequent null-pointer
+   copy is invalid. Fix: validate the field type before copying and return 400.
+
+7. P1 Network work stalls the cooperative main loop.
+   src/main.cpp:112,379,930; src/feeds.cpp:126,981,1591,2263;
+   src/webserver.cpp:930,1169
+   All due weather, market and Home Assistant requests run synchronously in one
+   feedsLoop call. Four HA slots each perform a separate request; read timeouts
+   are 12 seconds, with connection/TLS/probe work on top. WiFi reconnection takes
+   repeated 30-second waits, and scanNetworks(false,true) is blocking.
+   yield() services the core but does not call buttonUpdate, server.handleClient,
+   the display scheduler or ArduinoOTA.handle. Consequently slow/offline services
+   can freeze dashboard responsiveness, buttons and display updates for long
+   periods. Exact delays need device measurement; 12 seconds is not a total cap.
+   Fix: queue manual sync/scan work, service one feed/slot per scheduled step,
+   and implement bounded nonblocking reconnect/request states. One request per
+   loop reduces accumulated stalls but does not make that request nonblocking.
+
+8. P2 Replacement files are not committed atomically; auth cannot recover temp.
+   src/auth.cpp:127,136; src/dashboard.cpp:502,532; src/feeds.cpp:883,913
+   Writers explicitly delete the old file before rename. A reset or rename failure
+   in that interval loses the canonical file. Dashboard/feed loading can recover
+   .tmp after a reset, but deletes .tmp after a rename failure; auth loading never
+   checks .tmp. A valid new auth temp file can therefore be ignored and a new
+   generated password provisioned. The installed LittleFS rename delegates to
+   lfs_rename and can replace a destination without this explicit delete.
+   Fix: verify filesystem replacement semantics and commit by replacement rename;
+   recover validated auth temp files consistently. Fault-test power interruption.
+
+9. P2 Failed password saves still change the active password.
+   src/auth.cpp:263
+   authUpdatePassword mutates the live hash and clears the revealable password
+   before writeAuthConfig. On storage failure it returns an error but does not
+   restore the previous state. Reproduced with a failing storage mock: false was
+   returned while the active credential was new-password. Fix: stage the config,
+   persist it first, then publish it, or roll back all live fields on failure.
+
+10. P2 Partial Home Assistant failures disappear.
+    src/feeds.cpp:1604,1619,1639,1649; src/feeds.h:96; src/webui.h:2754
+    One successful slot causes global success, advances lastSuccessMs and clears
+    lastError even if another slot returns 404/401 or times out. Slots have no
+    individual error or success timestamp, although the UI looks for lastError.
+    Reproduced: one success plus one 404 returned true with empty lastError.
+    Fix: track result/error/last success per slot and expose partial success.
+
+11. P2 Cached Home Assistant values can look fresh after repeated failures.
+    src/feeds.cpp:1549,1628,1649; src/webui.h:2668,2758;
+    src/display.cpp:1163,1735
+    Failed polling preserves hasData and previous state. Retaining the value is
+    useful, but no per-slot stale indicator exists. A successful sibling refreshes
+    the global age, and feedStatusText prefers hasData over lastError even when
+    every slot fails. The TV displays the old state without freshness information.
+    Reproduced: the previously successful slot kept hasData after all polls failed.
+    Fix: keep cached values but display stale/error status and individual ages;
+    expose errors before a cached-success age in the dashboard.
+
+12. P2 Valid empty Home Assistant states are rejected as incomplete payloads.
+    src/feeds.cpp:1560,1501
+    Home Assistant core validates maximum state length but allows empty strings.
+    syncHomeAssistantSlot rejects an empty or whitespace-only state before the
+    normalization routine can show No data. This incorrectly reports a fetch
+    failure for a valid response. Fix: distinguish absent/wrong-type state fields
+    from present empty strings and define their display behavior explicitly.
+
+13. P2 The strict numeric parser validates a truncated input.
+    src/feeds.cpp:380
+    The parser copies to 32 bytes, then checks whether strtof consumed that copy.
+    A text state whose first 31 bytes are numeric and whose suffix contains letters
+    can be classified as numeric. Reproduced:
+    1234567890123456789012345678901oops was accepted by parseFloatStrict.
+    Fix: validate the original string or reject excess length before conversion.
+
+14. P2 Clock sprite colors use RGB565 values as palette indexes.
+    src/display.cpp:1355,1380,536
+    The clock sprite is 4 bpp, but fillSprite/setTextColor receive theme RGB565
+    colors. TFT_eSPI 2.5.43 masks these to their low four bits and uses its default
+    palette. For Aurora, the surface maps to green and the text to pink rather
+    than the intended theme colors. Some custom color pairs can map to the same
+    index. Fix: install a theme palette and draw with explicit indexes, or use
+    a two-color 1 bpp sprite with deliberate foreground/background mapping.
+    This is library-source confirmation; physical rendering remains to be checked.
+
+15. P2 Numeric-only fonts still hide characters outside the fixed HA text path.
+    src/display.cpp:1471,1573,1615,1697,1947
+    Font 7 supports digits, space, colon, period and minus. Font 6 additionally
+    supports a, p, m and a narrow-space pipe. Weather hero values include C/F;
+    event countdowns include in/h/m or Now; market prices include currency
+    prefixes; HA grouped numbers include commas; quote decoration uses a quote.
+    Those unsupported glyphs disappear when a numeric-only font is selected.
+    Fix: select fonts by character coverage as well as width, or render numeric
+    portions and their units/prefixes separately. The merged HA word fix is valid
+    but does not address these other uses.
+
+16. P2 A failed periodic failsafe reconnect can leave the AP disabled.
+    src/main.cpp:121,388
+    tryConnectWiFi switches to WIFI_STA. When monitorWiFi calls it from failsafe
+    mode and both attempts fail, there is no branch that restores WIFI_AP/softAP.
+    wifiFailsafeMode remains true and the display can claim setup mode while the
+    advertised access point is gone. This applies when credentials remain present,
+    such as entering AP mode from the normal connection-loss path.
+    Fix: preserve AP+STA during retry or explicitly restore the AP on failure.
+
+17. P2 Image uploads silently accept incomplete files and truncate paths.
+    src/webserver.cpp:987,1001,1013,352
+    File.write's byte count is ignored, so storage exhaustion can produce HTTP
+    success with a corrupt JPEG. Filenames are not length-checked before copying
+    into the path buffer, so a long valid filename can lose its extension or
+    collide with another prefix. Selection also checks existence before truncating
+    a supplied path. Fix: require complete writes, reject oversized paths before
+    copying, validate JPEG completion, and remove failed partial uploads.
+
+18. P2 Overwriting a displayed image at the same path does not refresh it.
+    src/webserver.cpp:972; src/display.cpp:2301
+    The image render cache compares only the path. Upload completion does not
+    invalidate it. Uploading a replacement under the current filename and showing
+    that same path leaves the old pixels visible. Fix: invalidate the image cache
+    when file contents change or include a content generation in the cache key.
+
+19. P2 A temporary message over an image may never expire on screen.
+    src/main.cpp:948; src/display.cpp:2266,2485
+    Showing a temporary message does not clear showImage. displayUpdate draws the
+    message immediately, but the main loop skips subsequent updates while an image
+    is selected. The 15-second password reveal can consequently remain on screen
+    until another action calls displayUpdate. Fix: continue servicing temporary
+    message expiry while images are selected, then restore the image.
+
+20. P2 Time synchronization can persist unsaved widget previews.
+    src/dashboard.cpp:963,1016
+    A preview started before NTP has updatedAtEpoch=0. When time becomes valid,
+    dashboardSyncRuntimeState sets anchors and calls dashboardSaveData for the
+    entire live data object. This saves other unsaved widget fields and captures
+    the draft as saved without the user selecting Save. Fix: update runtime anchors
+    separately from saved data and do not commit drafts during clock initialization.
+
+21. P2 Editing while Save is pending can incorrectly mark new changes saved.
+    src/webui.h:2980,3001,3008,3021
+    Save sends a payload, awaits its response, then unconditionally clears dirty
+    or feedDirty. Inputs remain editable during that wait. An intervening edit was
+    not in the saved payload but loses its unsaved marker. Reproduced with the
+    real commitState function and a delayed response: dirty=true during saving
+    became false when the earlier save completed.
+    Fix: compare edit generations when acknowledging saves; serialize preview/save
+    operations and only clear the generation that was actually persisted.
+
+22. P2 New hostnames are reported before network services adopt them.
+    src/webserver.cpp:401,629; src/main.cpp:103,428,448; src/webui.h:2994
+    Renaming changes appSettings and reported JSON/UI names, but does not update
+    the running WiFi, mDNS or OTA hostname. Until reboot, the displayed .local
+    address may not resolve while the previous address/service remains active.
+    Fix: apply the new service identity safely, or return an explicit reboot-needed
+    state and keep the currently active address in the UI until reboot.
+
+23. P2 mDNS initialization failure is treated as successful initialization.
+    src/main.cpp:432,518
+    setupMDNS returns void and returns early when MDNS.begin fails; the caller
+    nevertheless sets mdnsStarted=true. It will not retry. Fix: return a success
+    result and retry with a bounded delay after an unsuccessful initialization.
+
+24. P3 Focus progress starts at 100 percent instead of zero.
+    src/display.cpp:1438
+    When remainingSeconds equals totalSeconds, the >= branch sets elapsedSeconds
+    to totalSeconds. A fresh 25-minute session draws full progress, then nearly
+    empty progress on the next tick. Fix: clamp total-minus-remaining at zero.
+
+25. P3 Every full dashboard preview restarts NTP configuration.
+    src/webui.h:2776; src/webserver.cpp:394
+    All preview payloads contain gmtOffset. Its mere presence calls configTime,
+    even if unchanged. Core 3.1.2 starts that function with sntp_stop and restarts
+    configuration. Dragging brightness therefore repeatedly reconfigures time
+    services. Fix: compare the previous offset before applying it.
+
+26. P3 The existing API test script cannot validate the current API.
+    test-api.sh:7,14,23,47; src/webserver.cpp:1218
+    It uses an obsolete default hostname, performs no authentication, and calls
+    the removed /set route. It also lacks assertions that would fail on HTTP errors.
+    Fix: accept the actual host, authenticate to get a cookie, use current protected
+    POST routes, and assert expected response status and values. Do not run its
+    existing mutation calls as an audit against an unknown device.
+
+27. P2 Home Assistant numeric fonts can overrun compact cards vertically.
+    src/display.cpp:1700,1705,1754,1810; TFT_eSPI Fonts/Font64rle.h
+    Font selection tests width only. Font 6 is 48 pixels high, and compact cards
+    place its top at y+40. It ends at y+88, outside both the 70-pixel two-slot
+    cards and the 80-pixel grid cards. For example, the second two-slot card begins
+    at y=134 and its numeric value extends to y=222 while its panel ends at 204.
+    A short number fits horizontally, so the oversized font is actually selected.
+    Fix: choose candidate fonts using both available width and height and reserve
+    a separate unit area. Confirm two-slot and four-slot layouts on the screen.
+
+Home Assistant design assessment
+
+The basic protocol choice is sound for four periodically displayed entities.
+GET /api/states/<entity_id>, Authorization: Bearer, state as a string and the
+friendly_name/unit_of_measurement attributes match the REST contract. A 404 for
+an absent entity is correctly treated as a request failure. HTTP/1.0 requests avoid
+the usual direct-getStream chunk framing trap. JSON filtering avoids materializing
+all unrelated attributes and is appropriate for the ESP8266.
+
+Using a configured long-lived token is supported; these tokens are documented as
+valid for ten years. An OAuth refresh loop is not required for this mode. REST
+polling is a valid implementation, not an API violation. One-to-four-minute-scale
+refreshes are a product latency choice; a permanent WebSocket is not automatically
+better for this device's memory budget.
+
+The main design gaps are correctness and observability: preserve numeric values,
+record individual slot errors and age, label cached values stale, accept valid
+empty states, reject malformed/oversized settings before copying, and keep slow
+polling from blocking the UI. Avoid converting every numeric-looking state to a
+32-bit float: the diagnostic shows 16777217 becoming 16,777,216. Identifier-like
+numbers and high-precision measurements should preserve the original state text
+unless a deliberate rounding/display policy is configured.
+
+Home Assistant supports up to 255 state characters; the runtime holds 23 bytes
+plus termination. Entity IDs, labels, URLs and tokens also have fixed buffers.
+Compact display limits are reasonable, but silent truncation of identifiers or
+credentials is not: reject those inputs and visibly abbreviate display-only text.
+The built-in text fonts are not a general Unicode solution for zone/friendly names.
+
+Plain HTTP bearer tokens and setInsecure HTTPS do not authenticate the server.
+Fingerprint mode supplies certificate pinning, but not a CA trust store and normal
+certificate rotation. These are deliberate supported transport choices, not proof
+of an API bug. Prefer correctly configured pinning when HTTPS is available and
+explain its renewal requirements. normalizeFingerprint tries to skip separators,
+but the incoming value is first copied into a 41-byte buffer: a conventional
+59-character colon-separated SHA1 fingerprint is truncated and then rejected.
+Validate and normalize the full input before storing the 40 hex digits.
+
+Additional security risks
+
+* Password and session generation explicitly calls randomSeed. The installed core
+  then uses software rand instead of its hardware random register. Mixing cycle
+  counts and timers does not make this a cryptographic generator. Replace it with
+  the core's secure random facility; a demonstrated session prediction attack was
+  not performed. A 32-hex-character cookie does not imply 128 bits of entropy.
+  Sources: src/auth.cpp:184, src/main.cpp:89, src/webserver.cpp:191,216;
+  installed core cores/esp8266/WMath.cpp:33.
+* Failed/successful HTTPS transport logs include full URLs. Finnhub places the API
+  key in that URL, so it appears in the serial/in-memory log. Redact credentials
+  before logging URLs. src/feeds.cpp:1007,1129,1666.
+* Password hashes are unsalted MD5, which is cheap to guess if storage is obtained.
+  Login has no attempt throttling. The README describes HTTP/trusted-network use,
+  so this is an identified hardening gap rather than an internet exposure finding.
+  Use a stronger salted password verifier with ESP8266-appropriate costs; keep
+  the OTA-specific hash separate if that protocol requires it.
+
+Size and performance opportunities
+
+1. Precompress the embedded web pages at build time and serve Content-Encoding:
+   gzip directly from flash. Measured source UTF-8 payloads:
+     index_html: 139,092 raw bytes -> 23,149 gzip bytes
+     ota_html:    17,833 raw bytes ->  4,953 gzip bytes
+     total:      156,925 raw bytes -> 28,102 gzip bytes
+   Potential payload saving: 128,823 bytes, about 126 KiB. ELF symbols include
+   one terminator per page. This is a compression measurement, not a rebuilt
+   compressed firmware size. No runtime decompression should be needed. Verify
+   browser headers, content lengths and dashboard/OTA behavior after implementing.
+
+2. Fix scheduling before micro-optimizing strings. HTTP/1.0 and a fresh TLS client
+   per slot mean repeated TCP/TLS setup. Consider a bounded queue plus BearSSL
+   session reuse for the same host. Maintain safe memory limits; do not blindly
+   shrink receive buffers on servers without negotiated MFLN.
+
+3. Avoid four initial MFLN probes per unsupported host. The current sequence tests
+   512/1024/2048/4096 and may create four extra connections before the real request.
+   Also, host profiles hold only 39 characters: a longer HA hostname never matches
+   the stored truncated host, consumes the four profile slots and can be repeatedly
+   probed. Make cache keys exact/bounded, and invalidate/retry failed network probes
+   deliberately rather than caching transient failure indefinitely.
+
+4. Replace clock color misuse with a deliberate 1 bpp two-color sprite. At 216x64,
+   its bitmap payload is about 1,728 bytes versus about 6,912 bytes at 4 bpp,
+   excluding allocation overhead and palettes. Preserve the existing cache and
+   dynamic/static display regions: those are useful optimizations already present.
+
+5. JSON handlers unnecessarily serialize a subtree into String and deserialize it
+   into another JsonDocument. Passing validated JsonObjectConst directly can reduce
+   transient allocations in applyDashboardPayload/applyFeedPayload. Measure peak
+   free heap and largest allocation block; do not infer either from build RAM.
+
+6. .rodata occupies 14,216 bytes of data RAM in this build. Move suitable immutable
+   messages/tables to flash using correct ESP8266 flash access rather than a broad
+   refactor. Compare ELF sections and runtime largest free block after each change.
+   The 1,536-byte logger and 1,124-byte saved feed config are visible allocations;
+   the saved copy is needed for discard, so deleting it would change behavior.
+
+7. Coalesce EEPROM counter writes and skip commits for unchanged settings.
+   boot increment, power-cycle increment/reset and success reset share flash-backed
+   EEPROM and cause several erase/commit cycles per boot. Preserve reset behavior,
+   initialize structure padding, and check EEPROM.commit results. SettingsSave
+   currently returns void and reports success even when commit fails.
+
+8. TJpg_Decoder defaults bring SPIFFS/SD-related code into a LittleFS application.
+   Installed User_Config.h defines TJPGD_LOAD_SD_LIBRARY unconditionally, so a
+   simple -U build flag would not remove it. A maintained library configuration or
+   targeted dependency patch could exclude unused SD/default SPIFFS dependencies.
+   Rebuild and compare sizes before claiming savings; no backends were disabled
+   in this audit. Avoid a brittle edit inside PlatformIO's generated .pio cache.
+
+Suggested repair order and verification
+
+First repair numeric formatting, countdown payloads, storage commits, credential
+preservation/rotation and API type validation. Then repair HA slot error/freshness
+handling and network scheduling. Follow with sprite/font correctness and image/UI
+state handling. Apply compression after correctness fixes to get a measured size
+reduction without changing product features. Each change should have focused
+regression coverage plus a firmware build, then the applicable device checks.
+
+Hardware checks remaining for fixes: prolonged HA outage and partial 404/401;
+old/new OTA password after rotation; WiFi outage/recovery with AP availability;
+real storage exhaustion and power interruption; display palettes/fonts; image
+replacement and timed overlays; stable free heap during repeated TLS and uploads.
+This audit does not claim firmware correctness under those hardware conditions.
+
+Observed diagnostic output
+
+  HA 1000 -> 1; market 1000 -> 1
+  Strict parser accepts long text after truncation=1
+  HA exact integer 16777217 -> 16,777,216
+  Before unrelated UI payload: focus=900, event=3000
+  After identical stored durations resent: focus=1500, event=3600
+  Clock anchor initialization triggers whole-data save count=1, live quote='unsaved preview'
+  HA one slot OK, one 404: success=1, lastError=''
+  HA all slots fail next poll: success=0, old slot.hasData=1
+  Short filesystem write: save success=1, saved='{"token":"ab'
+  Password storage fails: success=0, active credential='new-password'
+  Numeric API line1: isNull=0, as<const char*> null=1
+  JavaScript syntax: 4 embedded scripts parsed
+  Saving payload brightness=50
+  User makes another edit while save is pending: dirty=true
+  After earlier save completes: dirty=false (new edit is marked saved)
+
+Primary external references
+
+Home Assistant REST API:
+https://developers.home-assistant.io/docs/api/rest/
+Home Assistant long-lived access tokens:
+https://developers.home-assistant.io/docs/auth_api/#long-lived-access-token
+Home Assistant state validation (validate_state):
+https://github.com/home-assistant/core/blob/dev/homeassistant/core.py
+ESP8266 BearSSL memory, authentication, sessions and MFLN:
+https://arduino-esp8266.readthedocs.io/en/latest/esp8266wifi/bearssl-client-secure-class.html
+
+Library behavior was also checked against installed source rather than assumed:
+ArduinoOTA.cpp, ESP8266WiFiSTA.cpp, WMath.cpp, time.cpp, LittleFS/src/LittleFS.h,
+TFT_eSPI/Extensions/Sprite.cpp, Fonts/Font64rle.c, Fonts/Font7srle.c, and ArduinoJson.
