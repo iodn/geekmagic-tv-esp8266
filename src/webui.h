@@ -1126,15 +1126,16 @@ input[type="submit"]:disabled,
                             </div>
                         </div>
                         <div class="field">
-                            <label for="rotationInterval">Rotation interval</label>
+                            <label for="rotationInterval">Seconds per screen</label>
                             <input data-live type="number" id="rotationInterval" min="3" max="120">
+                            <p class="muted small">Markets, Home, and World show one item at a time.</p>
                         </div>
                     </div>
 
                     <div class="toggle-grid">
                         <label class="toggle"><span>24-hour</span><input data-live type="checkbox" id="use24Hour"></label>
                         <label class="toggle"><span>Seconds</span><input data-live type="checkbox" id="showSeconds"></label>
-                        <label class="toggle"><span>Header IP</span><input data-live type="checkbox" id="showIp"></label>
+                        <label class="toggle"><span>Footer IP</span><input data-live type="checkbox" id="showIp"></label>
                         <label class="toggle"><span>Auto rotate</span><input data-live type="checkbox" id="rotationEnabled"></label>
                     </div>
                 </section>

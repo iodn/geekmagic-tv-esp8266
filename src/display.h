@@ -14,7 +14,7 @@
 
 struct DisplayState {
     char line2[DISPLAY_LINE_BUFFER_SIZE];       // Used for custom messages
-    char ipInfo[DISPLAY_IP_BUFFER_SIZE];      // IP address or network info to show at top
+    char ipInfo[DISPLAY_IP_BUFFER_SIZE];      // IP address or network info in the footer
     bool showImage;     // True if an image is currently displayed
     char imagePath[DISPLAY_PATH_BUFFER_SIZE];   // Path to the image file
     bool apMode;        // True when showing AP mode credentials screen

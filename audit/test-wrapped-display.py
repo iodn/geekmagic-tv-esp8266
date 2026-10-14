@@ -4,7 +4,7 @@ import re, subprocess, tempfile
 root=Path(__file__).resolve().parents[1]
 source=(root/'src/display.cpp').read_text()
 def extract(name):
-    match=re.search(r'^(?:std::vector<String>|void) '+name+r'\([^;{]*\)\s*\{',source,re.M)
+    match=re.search(r'^(?:std::vector<String>|String|void) '+name+r'\([^;{]*\)\s*\{',source,re.M)
     assert match,name
     start=source.index('{',match.start());end=start+1;depth=1
     while depth:
@@ -34,7 +34,7 @@ struct {
  void drawString(const String &s,int,int y,int f){int old=font;font=f;draws.push_back({s,y,fontHeight(),textWidth(s)});font=old;}
  void fillRoundRect(int,int,int,int,int,uint16_t){}
 } tft;
-struct ThemePalette {uint16_t text=1,muted=2,surface=3,surfaceAlt=4,accentSoft=5,accent=6;} theme;
+struct ThemePalette {uint16_t text=1,muted=2,surface=3,surfaceAlt=4,accentSoft=5,accent=6,background=7;} theme;
 const auto &activeTheme(){return theme;}
 struct {struct {char title[64],subtitle[96];} event;struct {char text[256],author[64];} quote;struct {char line1[96],line2[96];} status;} dashboardData{};
 bool hasEventContent(){return true;}bool hasQuoteContent(){return true;}bool hasStatusContent(){return true;}
@@ -44,7 +44,7 @@ void updateEventDynamicArea(){}
 String safeCString(const char *s){return s;}
 void drawAdaptiveText(const String &,int,int,int,int,const int*,size_t,uint16_t,uint16_t){}
 '''
-for name in ['wrapText','drawWrappedCenteredText','renderEventPage','renderQuotePage','renderStatusPage']:
+for name in ['wrapText','drawWrappedCenteredText','fitDisplayLabel','drawDisplayLabel','renderEventPage','renderQuotePage','renderStatusPage']:
     code+='\n'+extract(name)
 code+=r'''
 int main(){
@@ -58,13 +58,13 @@ int main(){
  tft.draws.clear();drawWrappedCenteredText("too tall",120,238,186,FONT_LABEL,1,3);assert(tft.draws.empty());
  memset(dashboardData.event.title,'W',sizeof(dashboardData.event.title)-1);
  memset(dashboardData.event.subtitle,'W',sizeof(dashboardData.event.subtitle)-1);
- renderEventPage();for(const auto &draw:tft.draws){assert(draw.width<=186);if(draw.y<100)assert(draw.y>=46 && draw.y+draw.height<=80);else assert(draw.y>=178 && draw.y+draw.height<=220);}
+ renderEventPage();for(const auto &draw:tft.draws){assert(draw.width<=224);if(draw.y<98)assert(draw.y>=16 && draw.y+draw.height<=76);else assert(draw.y>=174 && draw.y+draw.height<=210);}
  assert(!tft.draws.empty());
  tft.draws.clear();memset(dashboardData.quote.text,'W',sizeof(dashboardData.quote.text)-1);strcpy(dashboardData.quote.author,"Author");
- renderQuotePage();for(const auto &draw:tft.draws){assert(draw.y+draw.height<=180);if(draw.y>=104)assert(draw.width<=186);}
- assert(tft.draws.back().text.endsWith("..."));
+ renderQuotePage();for(const auto &draw:tft.draws){assert(draw.width<=224 && draw.y+draw.height<=216);}
+ assert(tft.draws[tft.draws.size()-2].text.endsWith("..."));
  tft.draws.clear();memset(dashboardData.status.line1,'W',sizeof(dashboardData.status.line1)-1);memset(dashboardData.status.line2,'W',sizeof(dashboardData.status.line2)-1);
- renderStatusPage();for(const auto &draw:tft.draws){assert(draw.width<=184);if(draw.y<132)assert(draw.y+draw.height<=128);else assert(draw.y>=150 && draw.y+draw.height<=220);}
+ renderStatusPage();for(const auto &draw:tft.draws){assert(draw.width<=224);if(draw.y<130)assert(draw.y>=30 && draw.y+draw.height<=106);else assert(draw.y>=130 && draw.y+draw.height<=206);}
 }
 '''
 with tempfile.TemporaryDirectory() as folder:

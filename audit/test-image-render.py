@@ -24,7 +24,7 @@ constexpr int JDR_OK=0,JDR_INP=1,DISPLAY_PATH_BUFFER_SIZE=64,DISPLAY_WIDTH=240,D
 class String:public std::string {public:using std::string::string;String(const std::string&s):std::string(s){}String(int value):std::string(std::to_string(value)){} };
 struct {bool showImage=true,apMode=false;char imagePath[64]="/images/test.jpg";} displayState;
 struct {char message[96]={};} temporaryMessage;
-struct ThemePalette {uint16_t surface=1,surfaceAlt=2,text=3;} theme;
+struct ThemePalette {uint16_t surface=1,surfaceAlt=2,text=3,background=4;} theme;
 const ThemePalette &activeTheme(){return theme;}
 bool temporaryMessageVisible(){return false;}bool temporaryMessageExpired(){return false;}
 void clearTemporaryMessage(){}uint32_t temporaryMessageHash(){return 0;}uint32_t apScreenHash(){return 0;}uint8_t activeThemeIdValue(){return 0;}

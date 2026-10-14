@@ -28,6 +28,8 @@ code = r'''
 using StringBase = std::string;
 struct String : StringBase {
  using StringBase::StringBase;
+ String(const std::string &s):StringBase(s){}
+ bool isEmpty() const {return empty();}
  String(float value, uint8_t precision){ char b[80];snprintf(b,sizeof b,"%.*f",precision,value);assign(b); }
  int indexOf(char c) const {auto n=find(c);return n==npos ? -1 : int(n);}
  bool endsWith(const char *s) const {return size()>=strlen(s) && compare(size()-strlen(s),strlen(s),s)==0;}
@@ -35,14 +37,15 @@ struct String : StringBase {
 };
 constexpr int FONT_INFO=1,FONT_LABEL=2,FONT_BODY=4,FONT_TITLE=6,FONT_HUGE=7,DISPLAY_HEIGHT=240;
 struct Canvas {
- int clearHeight=0,clearCalls=0;
+ int clearHeight=0,clearCalls=0,textSize=1;
+ void setTextSize(int size){textSize=size;}
  void fillRect(int,int,int,int h,uint16_t){clearHeight=h;++clearCalls;}
- int textWidth(const String &s,int font){return s.length()*(font==6 ? 27 : font==7 ? 32 : font==4 ? 16 : font==2 ? 8 : 6);}
+ int textWidth(const String &s,int font){return textSize*s.length()*(font==6 ? 27 : font==7 ? 32 : font==4 ? 16 : font==2 ? 8 : 6);}
  int currentFont=1,lastY=0,lastFont=0;String lastText;uint16_t lastColor=0;
  void setTextDatum(int){} void setTextFont(int font){currentFont=font;}
  void setTextColor(uint16_t color,uint16_t){lastColor=color;}
  void drawString(const String &text,int,int y,int font){lastY=y;lastFont=font;lastText=text;}
- int fontHeight(int font){return font==6 ? 48 : font==7 ? 48 : font==4 ? 26 : font==2 ? 16 : 8;}
+ int fontHeight(int font){return textSize*(font==6 ? 48 : font==7 ? 48 : font==4 ? 26 : font==2 ? 16 : 8);}
 } tft;
 struct {char imagePath[64];bool apMode=true,showImage=true;} displayState;
 int invalidations=0,updates=0;
@@ -57,23 +60,11 @@ for name in ("trimTrailingZeros", "fontSupportsText", "chooseCanvasFittingFont",
     code += function(name) + "\n"
 code += r'''
 constexpr int TC_DATUM=1,TL_DATUM=2;
-struct ThemePalette {uint16_t text=1,muted=2,accent=3,accentSoft=4,warning=5,surface=6;} theme;
+struct ThemePalette {uint16_t text=1,muted=2,accent=3,accentSoft=4,warning=5,surface=6,background=7;} theme;
 const ThemePalette &activeTheme(){return theme;}
-struct HomeAssistantSlotData {bool hasData=true,numeric=true,stale=false;char state[24]="123",lastError[64]={};uint32_t lastSuccessMs=0;} slot;
-const HomeAssistantSlotData *feedsHomeAssistantSlotData(uint8_t){return &slot;}
-String homeAssistantSlotLabel(uint8_t){return "Temperature";}
-String homeAssistantSlotUnit(uint8_t){return "C";}
-String safeCString(const char *s){return s;}
-bool feedsHomeAssistantConfigured(){return true;}
-bool homeAssistantSlotConfigured(uint8_t){return true;}
-bool homeAssistantWaitingForSync(){return false;}
-uint32_t millis(){return 120000;}
-void drawRoundedPanel(int,int,int,int,uint16_t,uint16_t){}
-String lastAdaptiveText;
-void drawAdaptiveText(const String &text,int,int,int,uint8_t,const int *,size_t,uint16_t,uint16_t){lastAdaptiveText=text;}
-void drawAdaptiveBadge(int,int,int,int,const String &,const int *,size_t,uint16_t,uint16_t){}
 struct WorldClockData {bool enabled=true;char label[16]="Tokyo";long offsetSeconds=0;};
-constexpr int DASHBOARD_WORLD_CLOCK_COUNT=2;
+constexpr int DASHBOARD_WORLD_CLOCK_COUNT=2,DASHBOARD_PAGE_WORLD=5;
+uint8_t dashboardItemSlot(uint8_t){return 0;}
 struct {WorldClockData worldClocks[2];struct {uint32_t durationMinutes=25;} focus;} dashboardData;
 String formatWorldTime(long){return "23:59";}
 using std::max;
@@ -81,7 +72,7 @@ using std::max;
 # Adapt the Arduino integer String constructor and rounded accent primitive for host mocks.
 code = code.replace(" using StringBase::StringBase;", " using StringBase::StringBase;\n String(uint32_t n){assign(std::to_string(n));}")
 code = code.replace(" void setTextDatum(int)", " void fillRoundRect(int,int,int,int,int,uint16_t){}\n void setTextDatum(int)")
-code += function("drawHomeAssistantCard") + "\n"
+code += function("fitDisplayLabel").replace("int font = FONT_LABEL", "int font") + "\n"
 code += r'''
 bool bufferAvailable=true;
 bool ensureClockDynamicSprite(){return bufferAvailable;}
@@ -190,18 +181,6 @@ int main(){
  uint32_t previousHash=focusHash();testRemaining--;assert(focusHash()==previousHash);
  testRemaining=7139;assert(focusHash()!=previousHash);
  testRemaining=3599;previousHash=focusHash();testRemaining--;assert(focusHash()!=previousHash);
- for(int height : {70,80,160}) {
-   drawHomeAssistantCard(16,48,208,height,0,0,0);
-   assert(tft.lastY+tft.fontHeight(tft.lastFont)<=48+height-14);
-   assert(tft.fontHeight(tft.lastFont)<= (height==70 ? 16 : height==80 ? 26 : 48));
- }
- slot.hasData=false;slot.stale=true;strcpy(slot.lastError,"HTTP 404");
- drawHomeAssistantCard(16,48,208,70,0,0,0);
- assert(tft.lastText=="Error" && tft.lastColor==theme.warning);assert(lastAdaptiveText=="Error");
- slot.hasData=true;slot.lastSuccessMs=60000;
- drawHomeAssistantCard(16,48,208,70,0,0,0);
- assert(tft.lastText=="123" && lastAdaptiveText=="Stale 1m");
- slot.stale=false;slot.lastError[0]='\0';
  strcpy(displayState.imagePath,"/images/test.jpg");
  displayInvalidateImage("/images/other.jpg"); assert(invalidations==0);
  displayInvalidateImage(nullptr); assert(invalidations==0);
@@ -212,14 +191,14 @@ int main(){
  assert(clearedMessages==1 && updates==2 && invalidations==2);
  int clearCalls=tft.clearCalls;
  updateWorldDynamicArea();
- assert(clockDynamicSprite.pushes==2 && tft.clearCalls==clearCalls);
- assert(clockDynamicSprite.foreground==theme.text && clockDynamicSprite.background==theme.surface);
- assert(tft.lastY==142);
- assert(tft.textWidth(tft.lastText,tft.lastFont)<=118);
+ assert(clockDynamicSprite.pushes==1 && tft.clearCalls==clearCalls);
+ assert(clockDynamicSprite.foreground==theme.text && clockDynamicSprite.background==theme.background);
+ assert(tft.lastY==80);
+ assert(tft.textWidth(tft.lastText,tft.lastFont)<=216);
  assert(tft.fontHeight(tft.lastFont)<=tft.clearHeight);
  assert(tft.lastY+tft.clearHeight<=220);
  bufferAvailable=false;updateWorldDynamicArea();
- assert(tft.clearCalls==clearCalls+2 && tft.lastY==142);
+ assert(tft.clearCalls==clearCalls+1 && tft.lastY==80);
  assert(tft.fontHeight(tft.lastFont)<=tft.clearHeight);
  const int dynamicFonts[]={FONT_HUGE,FONT_TITLE,FONT_BODY,FONT_INFO};
  bufferAvailable=true;

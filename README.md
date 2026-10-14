@@ -6,7 +6,9 @@ The project has been tested on the GeekMagic SmallTV Ultra ESP8266 variant. Othe
 
 ## Screenshots
 
-![Device display examples](assets/device-display.jpg)
+![Full-screen device layouts](assets/device-ui-aurora.png)
+
+Rendered previews use the firmware layout functions and the actual TFT font bitmaps.
 
 ![Dashboard feeds configuration](assets/dashboard-feeds.jpg)
 
@@ -49,7 +51,7 @@ Display and button pin mapping:
 
 The active build flags are defined in `platformio.ini`.
 
-The button on GPIO4 cycles to the next display page with a short press and toggles the backlight with a long press.
+The button on GPIO4 advances to the next screen with a short press and toggles the backlight with a long press. Markets, Home Assistant, and world clocks show one item at a time; all items in a section are visited before moving to the next section. Auto rotation uses the same sequence, with the configured interval applying to each item.
 
 ## Important Notes
 
@@ -202,7 +204,7 @@ The root page loads without a session, but management actions require login.
 
 Dashboard areas:
 
-- Display: clock format, brightness, device name, UTC offset, themes, page rotation, header IP, and night mode
+- Display: clock format, brightness, device name, UTC offset, themes, page rotation, footer IP, and night mode
 - Feeds: weather and market sources, provider credentials, and manual sync
 - Home Asst: Home Assistant REST feed settings and entity slots
 - Widgets: focus timer, world clocks, event countdown, quote, and status lines
