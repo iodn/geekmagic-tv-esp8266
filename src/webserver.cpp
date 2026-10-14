@@ -1094,7 +1094,10 @@ void handleFileUpload() {
             uploadStatusCode = 500;
             uploadErrorMessage = "Failed to commit image";
         }
-        if (uploadStatusCode != 200 && uploadTempPath[0] != '\0') {
+        if (uploadStatusCode == 200) {
+            displayInvalidateImage(uploadTargetPath);
+            displayUpdate();
+        } else if (uploadTempPath[0] != '\0') {
             LittleFS.remove(uploadTempPath);
         }
         uploadTempPath[0] = '\0';
