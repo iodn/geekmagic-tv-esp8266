@@ -13,6 +13,7 @@ const source = fs.readFileSync(path.join(__dirname, '../src/webui.h'), 'utf8');
         const page = await browser.newPage();
         const errors = [];
         page.on('pageerror', error => errors.push(error.message));
+        let previewFailures=0,previewRequests=0,saveRequests=0;
         const server = http.createServer((request, response) => {
             const endpoint = new URL(request.url, 'http://localhost').pathname;
             if (endpoint === '/' || endpoint === '/update') {
@@ -28,6 +29,14 @@ const source = fs.readFileSync(path.join(__dirname, '../src/webui.h'), 'utf8');
                 response.setHeader('Content-Length',body.length);
                 return response.end(body);
             }
+            if(endpoint === '/dashboard/live') {
+                previewRequests++;
+                if(previewFailures>0) {
+                    previewFailures--;response.writeHead(503,{'Content-Type':'text/plain'});
+                    return response.end('Temporary failure');
+                }
+            }
+            if(endpoint === '/dashboard/save') saveRequests++;
             const fixtures = {
                 '/auth/status': {authenticated: false, canRevealPassword: true, deviceName: 'Test TV', hostName: 'test-tv'},
                 '/app.json': {deviceName: 'LivingRoomClockWithALongNameHere', hostName: 'livingroomclockwithalongnamehere', brt: 70},
@@ -61,6 +70,15 @@ const source = fs.readFileSync(path.join(__dirname, '../src/webui.h'), 'utf8');
         await page.evaluate(async () => {hideAuthOverlay(); await loadAllState();});
         assert.equal(await page.evaluate(() => document.activeElement.dataset.tab), 'display');
         assert.equal(await page.locator('#appRoot').evaluate(element => element.inert), false);
+        previewFailures=1;
+        await page.evaluate(()=>{
+            const control=document.getElementById('brightness');control.value='80';
+            control.dispatchEvent(new Event('input',{bubbles:true}));
+        });
+        await page.waitForFunction(()=>document.getElementById('syncState').textContent==='Preview failed');
+        await page.locator('#saveDisplayButton').click();
+        await page.waitForFunction(()=>document.getElementById('syncState').textContent==='Saved');
+        assert.equal(previewRequests,2);assert.equal(saveRequests,1,'Save retries a failed preview in the actual browser');
         for (const theme of ['light','dark']) {
         await page.evaluate(nextTheme => setUiTheme(nextTheme), theme);
         for (const width of [320, 375, 1280]) {
@@ -73,6 +91,7 @@ const source = fs.readFileSync(path.join(__dirname, '../src/webui.h'), 'utf8');
         }
         }
         await page.evaluate(() => switchTab('display'));
+        await page.keyboard.press('Tab');
         await page.locator('#pageClock').focus();
         const outline = await page.locator('#pageClock + span').evaluate(element => getComputedStyle(element).outlineStyle);
         assert.equal(outline, 'solid', 'Page checkbox exposes a keyboard focus indicator');
@@ -92,7 +111,7 @@ const source = fs.readFileSync(path.join(__dirname, '../src/webui.h'), 'utf8');
             assert(sizes.scroll<=sizes.client,`OTA page overflows at ${width}px`);
         }
         assert.deepEqual(errors, [], 'Embedded UI has no browser errors');
-        console.log('Browser UI checks passed: login focus, inert background, chip focus, all six tabs at 320/375/1280px');
+        console.log('Browser UI checks passed: login focus, inert background, chip focus, preview/save recovery, all six tabs and OTA at 320/375/1280px');
     } finally {
         await browser.close();
         if(fixtureServer) await new Promise(resolve=>fixtureServer.close(resolve));

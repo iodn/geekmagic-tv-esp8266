@@ -44,7 +44,7 @@ d927913: PlatformIO generates deterministic gzip pages from editable webui.h.
           The actual root and OTA handlers send flash bytes with explicit lengths
           and Content-Encoding. The raw pages are absent from linked firmware.
 
-Current verification
+Verification after d927913
 
 pio run: PASS. Pinned ESP8266 platform/core builds successfully.
 Static RAM: 50,744 / 81,920 bytes (61.9%). Previous pass: 53,240 bytes.
@@ -74,6 +74,42 @@ builder leaves an unchanged header untouched, avoiding needless recompilation.
 
 Firmware binary SHA256:
 a3fef2c1571ab59c4751d694bfd8d6f7b415cce4cc4742d2cfccf230137ec49b
+
+Follow-up fixes and verification after 6c835fb
+
+5fe5032: Buffered drawing retries after a transient low-heap or allocation failure
+          instead of remaining disabled indefinitely. Attempts are bounded to
+          once per five seconds, and the timer handles the 32-bit millis wrap.
+c1b446f: Background preview failures are handled and shown in the UI. Pending
+          edits remain available, and an explicit Save/flush retries a failed
+          preview once. Old failures do not overwrite feedback for newer edits.
+174591f: Turning the backlight back on respects current night-mode brightness.
+          Previously it restored the daytime level even while night mode remained
+          active, and the unchanged-profile cache could leave it at that level.
+d7ac5a4: WiFi recovery restores the dashboard immediately with the station IP.
+          The previous explicit black frame could remain until the next periodic
+          redraw. Temporary setup messages are dismissed without blanking.
+6c835fb: Wrapped text is bounded horizontally and vertically. Long words split,
+          excess content ends in an ellipsis, and event titles, quotes, status
+          lines and messages cannot draw over adjacent content or outside their
+          card. Event titles have a dedicated two-line region above the divider.
+
+pio run: PASS. Latest static RAM 50,752 / 81,920 bytes (62.0%); flash
+728,519 / 1,044,464 bytes (69.8%). python3 audit/reproduce.py: PASS, now
+15 suites (13 Python, two Node). The new wrapped-text suite executes actual
+wrapping plus event/quote/status renderers with maximal text and mock metrics.
+The display, memory and WiFi suites check night brightness, bounded allocation
+recovery including millis wrap, and immediate dashboard restoration with the
+correct IP. UI failure tests check errors, retained drafts and bounded retries.
+
+Browser checks: PASS with the latest generated gzip assets. The real dashboard
+receives a 503 preview response from the local fixture, displays Preview failed,
+then successfully retries and saves without another edit. Keyboard focus styling
+is checked in keyboard modality, separately from the Save pointer interaction.
+All prior layout, theme, dialog and OTA checks still pass.
+
+Latest firmware binary SHA256:
+6c20078e9c353ba9ee5bf7ad6bdecc369d78f978c699b70f9e0feca06870e027
 
 Remaining verification and scope
 
