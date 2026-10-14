@@ -62,7 +62,8 @@ struct Canvas {
     int textWidth(const String&s,int f=0) const {if(!f)f=currentFont;int w=0;for(unsigned char c:s)w+=charWidth(c,f)*textSize;return w;}
     void pixel(int x,int y,uint16_t c) {if(x>=0&&x<width&&y>=0&&y<height)pixels[y*width+x]=c;}
     void fillRect(int x,int y,int w,int h,uint16_t c) {for(int yy=max(y,0);yy<min(y+h,height);++yy)for(int xx=max(x,0);xx<min(x+w,width);++xx)pixel(xx,yy,c);}
-    void fillScreen(uint16_t c) {std::fill(pixels.begin(),pixels.end(),c);}
+    int fullScreens=0;
+    void fillScreen(uint16_t c) {++fullScreens;std::fill(pixels.begin(),pixels.end(),c);}
     void fillRoundRect(int x,int y,int w,int h,int r,uint16_t c) {
         for(int yy=0;yy<h;++yy)for(int xx=0;xx<w;++xx){
             int dx=xx<r?r-xx-1:xx>=w-r?xx-(w-r):0;
@@ -158,15 +159,22 @@ bool hasStatusContent(){return !emptyData;}
 bool homeAssistantWaitingForSync(){return false;}
 const char *activeClockMessage(){return nullptr;}
 String safeCString(const char*s){return s?s:"";}
-String formatLocalTime(bool seconds,bool,bool *pm){*pm=false;return seconds?"12:34:56":"12:34";}
+String localClockText="12:34";
+bool localClockPm=false,timeSynced=true;
+char footerClockCache[16]={};
+String formatLocalTime(bool seconds,bool,bool *pm){*pm=localClockPm;return timeSynced ? localClockText+(seconds?":56":"") : "--:--";}
 String formatLocalDate(){return "Wed 14 Oct 2026";}
 String formatWorldTime(long offset){return offset==32400?"12:34":"08:34";}
-bool hasTimeSync(){return true;}
+bool hasTimeSync(){return timeSynced;}
 int32_t dashboardFocusRemainingSeconds(){return 24*60+38;}
 int32_t dashboardEventRemainingSeconds(){return 2*3600+3*60;}
 bool ensureClockDynamicSprite(){return spriteAvailable;}
 struct {bool valid=false;char metaLine[40]={};} clockMetaCache;
 bool temporaryMessageVisible(){return false;}
+constexpr int DISPLAY_MODE_DASHBOARD=0;
+struct {bool valid=false;uint8_t mode=0,page=0,theme=0;uint32_t staticHash=0,dynamicHash=0;} renderCache;
+uint8_t activeThemeIdValue(){return dashboardConfig.theme;}
+uint32_t dashboardStaticHash(uint8_t){return 1;}
 int appliedBrightness=70;
 int beginPageTransition(int n){return n;}
 void endPageTransition(int,int){}

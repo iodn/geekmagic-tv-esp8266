@@ -25,6 +25,7 @@ Rendered previews use the firmware layout functions and the actual TFT font bitm
 - EEPROM settings validation with firmware version and CRC checks
 - NTP time synchronization with configurable UTC offset
 - Day and night display profiles with scheduled brightness and theme options
+- Persistent local time on weather, markets, and every other dashboard page, with 12/24-hour formatting
 - Multi-page display: clock, weather, markets, Home Assistant, focus timer, world clocks, event countdown, quote, and status pages
 - Open-Meteo weather, Finnhub or CoinGecko market feeds, and queued Home Assistant REST polling with per-entity errors and freshness
 - Factory reset from the dashboard or by five quick power cycles

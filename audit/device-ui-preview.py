@@ -30,7 +30,7 @@ names = '''trimTrailingZeros groupThousands formatDuration focusProgressWidth
 formatRelativeCountdown formatUtcOffset formatClockMetaLine updateClockMetaCache
 fontSupportsText chooseCanvasFittingFont drawClockTime headerSubtitle wrapText
 drawWrappedCenteredText chooseFittingFont drawAdaptiveText fitDisplayLabel
-drawDisplayLabel drawHeroText drawItemPosition drawScreenChrome drawPlaceholder
+drawDisplayLabel drawHeroText drawItemPosition footerClockText updateFooterClock drawScreenChrome drawPlaceholder
 effectiveWeatherData weatherWaitingForSync weatherUnitSymbol formatWeatherTemperature
 effectiveMarketData marketCurrencyPrefix formatMarketPriceValue formatMarketPrice
 marketChangeWindowLabel marketWaitingForSync anyMarketsWaitingForSync
@@ -41,7 +41,7 @@ hashHomeAssistantData hashWorldClockData dashboardDynamicHash updateClockDynamic
 updateFocusDynamicArea updateWorldDynamicArea updateEventDynamicArea renderClockPage
 renderWeatherPage renderMarketsPage drawHomeAssistantValue renderHomePage renderFocusPage
 renderWorldPage renderEventPage renderQuotePage renderStatusPage renderDashboardPage
-displayCycleNextPage'''.split()
+displayCycleNextPage pageUsesDynamicRefresh updateDashboardDynamicArea renderDashboardPageCached'''.split()
 functions = sorted(function(name) for name in names)
 palette = source[source.index('constexpr uint16_t rgb565'):source.index('int savedBrightness')]
 code = '#include "device-ui-fixture.h"\n' + palette
@@ -54,7 +54,7 @@ void checkBounds(){
  for(auto &d:textDraws){
   if(d.x<0||d.y<0||d.x+d.w>240||d.y+d.h>240){fprintf(stderr,"Overflow: %s at %d,%d %dx%d\n",d.text.c_str(),d.x,d.y,d.w,d.h);abort();}
   assert(d.h>=16);
-  if(d.y<220)assert(d.y+d.h<=216);
+  if(d.y<212&&d.y+d.h>212){fprintf(stderr,"Footer boundary: %s at %d,%d %dx%d\n",d.text.c_str(),d.x,d.y,d.w,d.h);abort();}
  }
  assert(tft.textSize==1&&clockDynamicSprite.textSize==1);
 }
@@ -79,11 +79,24 @@ int main(int argc,char**argv){
  assert(argc==2);fixture();
  for(int theme=0;theme<DASHBOARD_THEME_COUNT;++theme){dashboardConfig.theme=theme;
   for(int page=0;page<9;++page){displayState.currentPage=page;normalizeDashboardItem();textDraws.clear();renderDashboardPage();checkBounds();
+   assert(hasDraw("12:34"));
+   if(page!=DASHBOARD_PAGE_CLOCK){bool footer=false;for(auto &d:textDraws)if(d.text=="12:34"&&d.y>=212)footer=true;assert(footer);}
    tft.save(std::string(argv[1])+"/theme-"+std::to_string(theme)+"-page-"+std::to_string(page)+".ppm");
    if(page==DASHBOARD_PAGE_MARKETS){assert(hasDraw("Bitcoin")&&!hasDraw("Microsoft"));for(auto&d:textDraws)if(d.text=="+2.54%")assert(d.h>=52);}
    if(page==DASHBOARD_PAGE_WEATHER)for(auto&d:textDraws)if(d.text=="22C")assert(d.h>=78);
   }
  }
+ // The local clock updates independently of feed data and retains its placement.
+ displayState.currentPage=DASHBOARD_PAGE_MARKETS;dashboardConfig.use24Hour=true;
+ textDraws.clear();drawScreenChrome("Markets");assert(hasDraw("12:34"));
+ renderCache.valid=false;renderDashboardPageCached();int fullScreens=tft.fullScreens;
+ textDraws.clear();renderDashboardPageCached();assert(textDraws.empty());
+ localClockText="12:35";renderDashboardPageCached();assert(textDraws.size()==1&&hasDraw("12:35"));assert(tft.fullScreens==fullScreens);
+ assert(textDraws[0].x==8&&textDraws[0].y>=212&&textDraws[0].w<=84);checkBounds();
+ dashboardConfig.use24Hour=false;localClockPm=true;textDraws.clear();updateFooterClock();assert(hasDraw("12:35 PM"));checkBounds();
+ localClockPm=false;textDraws.clear();updateFooterClock();assert(hasDraw("12:35 AM"));checkBounds();
+ timeSynced=false;textDraws.clear();updateFooterClock();assert(hasDraw("--:--"));checkBounds();
+ timeSynced=true;localClockText="12:34";dashboardConfig.use24Hour=true;
  // Every available item is visited before advancing sections, including a single-section setup.
  for(auto &e:dashboardConfig.enabledPages)e=false;dashboardConfig.enabledPages[DASHBOARD_PAGE_MARKETS]=true;
  displayState.currentPage=DASHBOARD_PAGE_MARKETS;normalizeDashboardItem();selectedItemIndex=0;

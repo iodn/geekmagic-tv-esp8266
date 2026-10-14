@@ -107,6 +107,7 @@ struct ClockMetaCache {
 };
 
 ClockMetaCache clockMetaCache = {false, {0}};
+char footerClockCache[16] = {0};
 bool clockDynamicSpriteReady = false;
 bool clockDynamicSpriteAttempted = false;
 uint32_t clockDynamicSpriteLastAttemptMs = 0;
@@ -157,6 +158,7 @@ void hashCString(uint32_t &hash, const char *value) {
 void invalidateRenderCache() {
     renderCache.valid = false;
     clockMetaCache.valid = false;
+    footerClockCache[0] = '\0';
     clockMetaCache.metaLine[0] = '\0';
 }
 
@@ -781,11 +783,38 @@ void drawItemPosition() {
     }
 }
 
+String footerClockText() {
+    bool isPm = false;
+    String text = formatLocalTime(false, dashboardConfig.use24Hour, &isPm);
+    if (!dashboardConfig.use24Hour && hasTimeSync()) text += isPm ? " PM" : " AM";
+    return text;
+}
+
+void updateFooterClock() {
+    if (displayState.currentPage == DASHBOARD_PAGE_CLOCK && !temporaryMessageVisible()) return;
+    String text = footerClockText();
+    if (strcmp(footerClockCache, text.c_str()) == 0) return;
+    const ThemePalette &theme = activeTheme();
+    tft.setTextSize(1);
+    const int fonts[] = {FONT_BODY, FONT_LABEL};
+    int font = chooseFittingFont(text, 84, fonts, 2, 26);
+    tft.fillRect(8, 212, 84, 28, theme.background);
+    int y = 212 + max(0, (26 - tft.fontHeight(font)) / 2);
+    drawDisplayLabel(text, 8, y, 84, TL_DATUM, theme.text, font);
+    strncpy(footerClockCache, text.c_str(), sizeof(footerClockCache) - 1);
+    footerClockCache[sizeof(footerClockCache) - 1] = '\0';
+}
+
 void drawScreenChrome(const String &title) {
     const ThemePalette &theme = activeTheme();
     tft.setTextSize(1);
     tft.fillScreen(theme.background);
-    drawDisplayLabel(title, 8, 220, 84, TL_DATUM, theme.accent);
+    footerClockCache[0] = '\0';
+    if (displayState.currentPage == DASHBOARD_PAGE_CLOCK && !temporaryMessageVisible()) {
+        drawDisplayLabel(title, 8, 220, 84, TL_DATUM, theme.accent);
+    } else {
+        updateFooterClock();
+    }
     String address = headerSubtitle();
     if (!address.isEmpty()) {
         drawDisplayLabel(address, 232, 220, 132, TR_DATUM, theme.muted);
@@ -1555,8 +1584,8 @@ void renderWeatherPage() {
     const char *labels[] = {"High", "Low", "Rain"};
     for (uint8_t index = 0; index < 3; ++index) {
         int centerX = 40 + index * 80;
-        drawDisplayLabel(labels[index], centerX, 170, 72, TC_DATUM, theme.muted);
-        drawAdaptiveText(values[index], centerX, 188, 72, TC_DATUM,
+        drawDisplayLabel(labels[index], centerX, 166, 72, TC_DATUM, theme.muted);
+        drawAdaptiveText(values[index], centerX, 184, 72, TC_DATUM,
                          valueFonts, sizeof(valueFonts) / sizeof(valueFonts[0]), theme.text, theme.background);
     }
 }
@@ -1578,7 +1607,7 @@ void renderMarketsPage() {
     String change = (market->changePercent >= 0.0f ? "+" : "") + trimTrailingZeros(market->changePercent,
                        fabsf(market->changePercent) >= 10.0f ? 1 : 2) + "%";
     drawHeroText(change, 136, 64, market->changePercent >= 0.0f ? theme.positive : theme.negative);
-    drawDisplayLabel(marketChangeWindowLabel(index) + " change", 120, 200, 224, TC_DATUM, theme.muted);
+    drawDisplayLabel(marketChangeWindowLabel(index) + " change", 120, 196, 224, TC_DATUM, theme.muted);
 }
 
 void drawHomeAssistantValue(uint8_t slotIndex) {
@@ -1763,6 +1792,7 @@ void renderDashboardPageCached() {
         updateDashboardDynamicArea(pageId);
         renderCache.dynamicHash = dynamicHash;
     }
+    updateFooterClock();
 }
 
 }  // namespace
@@ -1949,6 +1979,7 @@ void displayUpdate() {
             renderCache.mode == DISPLAY_MODE_TEMP_MESSAGE &&
             renderCache.theme == themeId &&
             renderCache.staticHash == currentHash) {
+            updateFooterClock();
             return;
         }
 
