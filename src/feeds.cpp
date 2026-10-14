@@ -13,6 +13,7 @@
 #include <include/ClientContext.h>
 #include <limits.h>
 #include <math.h>
+#include <umm_malloc/umm_heap_select.h>
 
 FeedConfig feedConfig;
 FeedRuntimeState feedRuntime;
@@ -935,6 +936,27 @@ private:
     uint32_t consumed_ = 0;
 };
 
+bool tlsHeapReady() {
+    uint32_t freeHeap = 0;
+    uint32_t largestBlock = 0;
+    ESP.getHeapStats(&freeHeap, &largestBlock);
+#ifdef UMM_HEAP_IRAM
+    // BearSSL prefers the secondary heap for its receive/transmit buffers.
+    {
+        HeapSelectIram selected;
+        uint32_t iramFree = 0;
+        uint32_t iramLargest = 0;
+        ESP.getHeapStats(&iramFree, &iramLargest);
+        freeHeap += iramFree;
+        largestBlock = max(largestBlock, iramLargest);
+    }
+#endif
+    logPrintf(F("TLS heap: free=%u max=%u"), freeHeap, largestBlock);
+    // BearSSL adds 325 bytes of TLS record overhead to the receive buffer.
+    return freeHeap >= kHttpsMinFreeHeapBytes &&
+           largestBlock >= static_cast<uint32_t>(kHttpsDefaultRecvBufferBytes) + 325UL;
+}
+
 bool httpGetJson(const String &url,
                  JsonDocument &doc,
                  String *error,
@@ -1047,7 +1069,7 @@ bool httpGetJson(const String &url,
         }
     } displayHeapGuard;
 
-    if (ESP.getFreeHeap() < kHttpsMinFreeHeapBytes) {
+    if (!tlsHeapReady()) {
         if (error) *error = F("Low heap, retrying later");
         return false;
     }
@@ -1974,6 +1996,9 @@ void runFeedJob() {
             searchStatus = FEED_SEARCH_FAILED;
             searchError = lastSyncError;
         }
+    }
+    if (activeSyncMask != 0 && !lastSyncSuccess) {
+        logPrintf(F("Feed sync failed: %s"), lastSyncError.c_str());
     }
     feedJobComplete = true;
 }

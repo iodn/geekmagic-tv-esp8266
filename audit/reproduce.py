@@ -20,6 +20,7 @@ for name in (
     'test-jpeg.py',
     'regression-dashboard.py',
     'feed-regressions.py',
+    'test-tls-heap.py',
     'regression-network.py',
     'regression-webserver.py',
     'test-api-script.py',

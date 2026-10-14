@@ -5,6 +5,7 @@
 #include <ArduinoOTA.h>
 #include <LittleFS.h>
 #include <user_interface.h>
+#include <umm_malloc/umm_heap_select.h>
 #include "config.h"
 #include "dashboard.h"
 #include "display.h"
@@ -47,6 +48,13 @@ void logHeapState(const char *stage) {
     uint8_t fragmentation = 0;
     ESP.getHeapStats(&freeHeap, &largestBlock, &fragmentation);
     logPrintf(F("Heap %s: free=%u max=%u frag=%u%%"), stage, freeHeap, largestBlock, fragmentation);
+#ifdef UMM_HEAP_IRAM
+    {
+        HeapSelectIram selected;
+        ESP.getHeapStats(&freeHeap, &largestBlock, &fragmentation);
+    }
+    logPrintf(F("IRAM heap: free=%u max=%u frag=%u%%"), freeHeap, largestBlock, fragmentation);
+#endif
 }
 
 void logOptionalServiceDelay(const char *serviceName, uint32_t freeHeap) {

@@ -83,6 +83,7 @@ FeedTlsClient *activeTlsClient = nullptr;
 struct { int status() { return 3; } } WiFi;
 constexpr int WL_CONNECTED = 3;
 void logPrint(const char*) {}
+void logPrintf(const char*,...) {}
 bool feedsHomeAssistantConfigured() { return true; }
 bool failAll = false;
 bool syncHomeAssistantSlot(uint8_t index, String *error) {
