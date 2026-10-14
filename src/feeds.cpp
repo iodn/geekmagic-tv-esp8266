@@ -1406,7 +1406,7 @@ String uppercaseString(const String &value) {
 
 String trimTrailingZerosString(const String &value) {
     String result = value;
-    while (result.endsWith("0")) {
+    while (result.indexOf('.') >= 0 && result.endsWith("0")) {
         result.remove(result.length() - 1);
     }
     if (result.endsWith(".")) {

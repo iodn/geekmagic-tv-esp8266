@@ -360,7 +360,7 @@ bool hasTimeSync() {
 
 String trimTrailingZeros(float value, uint8_t precision = 2) {
     String result(value, precision);
-    while (result.endsWith("0")) {
+    while (result.indexOf('.') >= 0 && result.endsWith("0")) {
         result.remove(result.length() - 1);
     }
     if (result.endsWith(".")) {
