@@ -2450,6 +2450,13 @@ function populateThemeButtons(containerId, inputId) {
         button.appendChild(label);
         button.addEventListener("click", () => {
             document.getElementById(inputId).value = String(themeData.value);
+            if (inputId === "nightThemePreset") {
+                document.getElementById("nightCustomThemeEnabled").checked = false;
+                updateNightThemeUI();
+            } else {
+                document.getElementById("customThemeEnabled").checked = false;
+                updateCustomThemeUI();
+            }
             updateThemeButtons(containerId, inputId);
             scheduleLiveSync(90);
         });
