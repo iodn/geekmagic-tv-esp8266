@@ -683,6 +683,10 @@ input[type="color"] {
     color: var(--accent-strong);
     background: var(--accent-soft);
 }
+.chip-toggle input:focus-visible + span {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+}
 details {
     border: 1px solid transparent;
     border-radius: 22px;
@@ -983,7 +987,7 @@ input[type="submit"]:disabled,
 </style>
 </head>
 <body>
-<div class="app">
+<div class="app" id="appRoot" inert>
     <header class="topbar">
         <div class="brand">
             <div class="brand-mark"></div>
@@ -997,7 +1001,7 @@ input[type="submit"]:disabled,
                 <button class="mode-button" type="button" data-ui-theme-button="light" onclick="setUiTheme('light')">Light</button>
                 <button class="mode-button" type="button" data-ui-theme-button="dark" onclick="setUiTheme('dark')">Dark</button>
             </div>
-            <span id="syncState" class="pill">Ready</span>
+            <span id="syncState" class="pill" role="status">Ready</span>
             <button id="saveDisplayButton" type="button" onclick="commitState()">Save changes</button>
             <button id="discardDisplayButton" class="ghost" type="button" onclick="discardState()">Discard</button>
             <button class="ghost" type="button" onclick="loadAllState()">Refresh</button>
@@ -1828,7 +1832,7 @@ input[type="submit"]:disabled,
                 <button type="submit">Sign in</button>
                 <button id="authRevealButton" type="button" class="ghost hidden" onclick="revealPasswordOnDevice()">Show password on device</button>
             </div>
-            <div id="authMessage" class="auth-message"></div>
+            <div id="authMessage" class="auth-message" role="alert"></div>
         </form>
         <div class="auth-support">
             <div class="auth-note" id="authSetupNote"></div>
@@ -2073,6 +2077,7 @@ function updateAuthGuidance() {
 
 function setAuthenticatedState(nextState) {
     authenticated = Boolean(nextState);
+    document.getElementById("appRoot").inert = !authenticated;
     document.body.classList.toggle("auth-open", !authenticated);
     document.getElementById("authOverlay").classList.toggle("active", !authenticated);
     document.getElementById("signOutButton").classList.toggle("hidden", !authenticated);
@@ -2089,6 +2094,24 @@ function showAuthOverlay(message = "", tone = "") {
 function hideAuthOverlay() {
     setAuthenticatedState(true);
     setAuthMessage("");
+    document.querySelector(".tab.active").focus();
+}
+
+function trapAuthFocus(event) {
+    if (authenticated || event.key !== "Tab") return;
+    const controls = Array.from(document.getElementById("authOverlay")
+        .querySelectorAll("input:not(:disabled), button:not(:disabled)"))
+        .filter((control) => control.offsetParent !== null);
+    const first = controls[0];
+    const last = controls[controls.length - 1];
+    if (!first) return;
+    if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+    }
 }
 
 function handleUnauthorized(message = "Sign in to continue.") {
@@ -3684,6 +3707,8 @@ async function loadAllState() {
         updateActionButtons();
     }
 }
+
+document.addEventListener("keydown", trapAuthFocus);
 
 document.addEventListener("input", (event) => {
     if (event.target.matches("[data-feed-live]")) {

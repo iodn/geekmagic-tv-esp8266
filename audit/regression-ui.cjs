@@ -74,6 +74,18 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
     loading=vm.runInContext('loadAllState()',hydrationContext);await tick();
     pendingLoads.splice(0).forEach(resolve=>resolve({ok:true,json:async()=>({})}));
     await loading;assert.equal(appliedDisplay,2);assert.equal(appliedFeeds,1,'Clean controls hydrate normally');
+    let focusIndex=0,prevented=0;
+    const controls=[{offsetParent:{}},{offsetParent:{}},{offsetParent:null}];
+    controls.forEach((control,index)=>control.focus=()=>{focusIndex=index;});
+    const authContext=vm.createContext({authenticated:false,
+        document:{activeElement:controls[0],getElementById(){return {querySelectorAll(){return controls;}};}}
+    });
+    vm.runInContext(extract('trapAuthFocus'),authContext);
+    authContext.event={key:'Tab',shiftKey:true,preventDefault(){prevented++;}};
+    vm.runInContext('trapAuthFocus(event)',authContext);assert.equal(focusIndex,1);assert.equal(prevented,1);
+    authContext.document.activeElement=controls[1];authContext.event.shiftKey=false;
+    vm.runInContext('trapAuthFocus(event)',authContext);assert.equal(focusIndex,0);assert.equal(prevented,2);
+    authContext.authenticated=true;vm.runInContext('trapAuthFocus(event)',authContext);assert.equal(prevented,2);
     const calls=[];let releaseFirst;
     context.first = () => {calls.push('preview'); return new Promise(resolve => {releaseFirst=resolve;});};
     context.second = () => {calls.push('discard');};
