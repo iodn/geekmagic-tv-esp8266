@@ -3504,8 +3504,8 @@ async function changeAdminPassword() {
         document.getElementById("newAdminPassword").value = "";
         document.getElementById("confirmAdminPassword").value = "";
         await refreshAuthStatus();
-        document.getElementById("securityStatus").textContent = "Password updated. Sign in again.";
-        showAuthOverlay("Password updated. Sign in again.");
+        document.getElementById("securityStatus").textContent = "Password updated. Device restarting; sign in after it reconnects.";
+        showAuthOverlay("Password updated. Device restarting; sign in after it reconnects.");
         setSyncState("Password updated", "saved");
     } catch (error) {
         console.error(error);

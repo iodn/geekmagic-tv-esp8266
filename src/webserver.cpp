@@ -11,6 +11,7 @@
 #include <ArduinoJson.h>
 #include <ESP8266WebServer.h>
 #include <ESP8266WiFi.h>
+#include <ArduinoOTA.h>
 #include <LittleFS.h>
 #include <WiFiManager.h>
 #include <ctype.h>
@@ -22,6 +23,7 @@ int currentTheme = 0;
 char currentImage[DISPLAY_PATH_BUFFER_SIZE];
 
 extern Settings appSettings;
+extern bool otaStarted;
 
 File uploadFile;
 
@@ -33,6 +35,8 @@ Settings savedAppSettings = {};
 bool savedSettingsReady = false;
 bool factoryResetPending = false;
 bool wifiReconfigurePending = false;
+bool rebootPending = false;
+unsigned long rebootRequestedAtMs = 0;
 String uploadErrorMessage;
 int uploadStatusCode = 200;
 char uploadTargetPath[DISPLAY_PATH_BUFFER_SIZE] = {0};
@@ -103,6 +107,15 @@ bool hostnameRestartRequired() {
     char hostname[SETTINGS_HOSTNAME_LENGTH];
     copyConfiguredHostname(hostname, sizeof(hostname));
     return WiFi.hostname() != hostname;
+}
+
+void queueRestart() {
+    if (otaStarted) {
+        ArduinoOTA.end();
+        otaStarted = false;
+    }
+    rebootPending = true;
+    rebootRequestedAtMs = millis();
 }
 
 void copyDefaultDeviceName(char *buffer, size_t bufferSize) {
@@ -792,7 +805,8 @@ void handleAuthPasswordChange() {
 
     clearSessionState();
     clearSessionCookie();
-    sendTextResponse(200, "Password updated");
+    queueRestart();
+    sendTextResponse(200, "Password updated. Device restarting.");
 }
 
 void handleDashboardConfigSave() {
@@ -1358,6 +1372,12 @@ void webserverHandle() {
 }
 
 void webserverProcessPendingActions() {
+    if (rebootPending) {
+        if (millis() - rebootRequestedAtMs >= 1000UL) {
+            ESP.restart();
+        }
+        return;
+    }
     if (factoryResetPending) {
         factoryResetPending = false;
         performFactoryResetNow();
@@ -1374,7 +1394,8 @@ void webserverProcessPendingActions() {
 }
 
 bool webserverHasPendingNetworkAction() {
-    return factoryResetPending ||
+    return rebootPending ||
+           factoryResetPending ||
            wifiReconfigurePending ||
            wifiConnectTask.queued ||
            wifiConnectTask.active;
