@@ -17,7 +17,10 @@ struct {bool alive=true;int code=0;void keepAlive(bool v){alive=v;}void sendHead
 '''
 for name in ('prepareNoStoreHeaders','sendTextResponse','sendJsonResponse'):
     code+=extract(name)+'\n'
-code+='''int main(){sendJsonResponse(202,"{\\"pending\\":true}");assert(server.code==202);server.alive=true;sendJsonResponse(200,"{}");server.alive=true;sendTextResponse(409,"Busy");}'''
+code+='bool busy=true;bool feedsBusy(){return busy;}int builds=0;void dashboardBuildFullJson(String &s){++builds;s="{}";}void feedsBuildStateJson(String &s){++builds;s="{}";}\n'
+for name in ('handleDashboardJson','handleFeedsJson'):
+    code+=extract(name)+'\n'
+code+='''int main(){handleDashboardJson();handleFeedsJson();assert(server.code==202 && builds==0);busy=false;handleDashboardJson();handleFeedsJson();assert(server.code==200 && builds==2);sendJsonResponse(202,"{\\"pending\\":true}");assert(server.code==202);server.alive=true;sendJsonResponse(200,"{}");server.alive=true;sendTextResponse(409,"Busy");}'''
 with tempfile.TemporaryDirectory() as folder:
     p=Path(folder);(p/'test.cpp').write_text(code)
     subprocess.run(['g++','-std=c++17',str(p/'test.cpp'),'-o',str(p/'test')],check=True)

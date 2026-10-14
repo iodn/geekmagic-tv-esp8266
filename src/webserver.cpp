@@ -594,12 +594,20 @@ void handleAppJson() {
 }
 
 void handleDashboardJson() {
+    if (feedsBusy()) {
+        sendJsonResponse(202, "{\"pending\":true}");
+        return;
+    }
     String json;
     dashboardBuildFullJson(json);
     sendJsonResponse(200, json);
 }
 
 void handleFeedsJson() {
+    if (feedsBusy()) {
+        sendJsonResponse(202, "{\"pending\":true}");
+        return;
+    }
     String json;
     feedsBuildStateJson(json);
     sendJsonResponse(200, json);

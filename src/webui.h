@@ -3582,6 +3582,7 @@ async function loadFeedStateOnly() {
     const preserveEdits = feedDirty;
 
     const response = await request("/feeds.json");
+    if (response.status === 202) return;
     if (!response.ok) {
         throw new Error("Feed state failed");
     }
@@ -3615,6 +3616,12 @@ async function loadAllState() {
             request("/version.json"),
             request("/space.json")
         ]);
+
+        if (dashboardResponse.status === 202 || feedsResponse.status === 202) {
+            setSyncState("Feed sync in progress", "pending");
+            window.setTimeout(() => loadAllState(), 1000);
+            return;
+        }
 
         if (!appResponse.ok || !dashboardResponse.ok || !feedsResponse.ok || !versionResponse.ok || !spaceResponse.ok) {
             throw new Error("State request failed");
