@@ -24,4 +24,5 @@ for name in (
 ):
     subprocess.run([sys.executable, str(root / 'audit' / name)], cwd=root, check=True)
 subprocess.run(['node', str(root / 'audit' / 'regression-ui.cjs')], cwd=root, check=True)
+subprocess.run(['node', str(root / 'audit' / 'regression-ui-errors.cjs')], cwd=root, check=True)
 print('All host regression checks passed. Hardware validation remains separate.')

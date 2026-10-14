@@ -2976,7 +2976,12 @@ function scheduleFeedPreview(delay = 180) {
 
     feedLiveTimer = window.setTimeout(() => {
         feedLiveTimer = 0;
+        const generation = feedEditGeneration;
         feedPromise = doFeedPreview();
+        feedPromise.catch((error) => {
+            console.error(error);
+            if (authenticated && generation === feedEditGeneration) setSyncState("Feed preview failed", "error");
+        });
     }, delay);
 }
 
@@ -2993,12 +2998,18 @@ function scheduleLiveSync(delay = 180) {
 
     liveTimer = window.setTimeout(() => {
         liveTimer = 0;
+        const generation = editGeneration;
         livePromise = doLiveSync();
+        livePromise.catch((error) => {
+            console.error(error);
+            if (authenticated && generation === editGeneration) setSyncState("Preview failed", "error");
+        });
     }, delay);
 }
 
 async function doLiveSync() {
     return queueOperation(async () => {
+        const generation = editGeneration;
         const timezone = getTimezoneFromUI();
         if (timezone === null) {
             setSyncState("Timezone", "error");
@@ -3014,12 +3025,14 @@ async function doLiveSync() {
             throw new Error(await response.text());
         }
 
-        setSyncState("Display draft", "live");
+        setSyncState(editGeneration === generation ? "Display draft" : "Pending",
+                     editGeneration === generation ? "live" : "pending");
     });
 }
 
 async function doFeedPreview() {
     return queueOperation(async () => {
+        const generation = feedEditGeneration;
         const payload = buildFeedPayload();
         setSyncState("Feeds preview", "pending");
 
@@ -3029,7 +3042,8 @@ async function doFeedPreview() {
             throw new Error(await response.text());
         }
 
-        setSyncState("Feeds draft", "live");
+        setSyncState(feedEditGeneration === generation ? "Feeds draft" : "Feeds pending",
+                     feedEditGeneration === generation ? "live" : "pending");
     });
 }
 
@@ -3040,7 +3054,11 @@ async function flushLiveSync() {
         livePromise = doLiveSync();
     }
 
-    return livePromise;
+    return livePromise.catch((error) => {
+        if (!authenticated) throw error;
+        livePromise = doLiveSync();
+        return livePromise;
+    });
 }
 
 async function flushFeedPreview() {
@@ -3050,7 +3068,11 @@ async function flushFeedPreview() {
         feedPromise = doFeedPreview();
     }
 
-    return feedPromise;
+    return feedPromise.catch((error) => {
+        if (!authenticated) throw error;
+        feedPromise = doFeedPreview();
+        return feedPromise;
+    });
 }
 
 async function commitState() {
