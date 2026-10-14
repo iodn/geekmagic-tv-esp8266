@@ -1,0 +1,77 @@
+Device UI redesign — 2026-10-14
+
+User request
+
+Redesign the small 240x240 device screen for larger, more legible information,
+especially market percentage changes and temperature. Replace the intrusive
+section/IP top bar with a cleaner layout while retaining both pieces of context.
+Use the available screen area and reduce decorative clutter.
+
+Implemented source: e47c966
+
+All nine dashboard layouts use the full background and wider content area.
+Section name and optional IPv4 address move to a 16-pixel footer. Market,
+Home Assistant and world-clock sections show one item at a time, with a 1/N
+position indicator. Short button presses and automatic rotation visit every
+available item before leaving a section; the existing interval applies per item.
+Configuration versions and persisted settings do not change.
+
+For typical data the market percentage is 52 pixels high (previously 8),
+main weather temperature 78 (previously 26), and clock temperature 52. Home
+Assistant values and focus/event timers use enlarged text; units, headings,
+quotes and status lines also have clearer hierarchy. Oversized text uses bounded
+fitting/wrapping and explicit ellipsis. Static labels are at least 16 pixels.
+High/low/rain remain together on Weather; Clock shows temperature and condition.
+
+Dynamic text reuses the existing 216x64 one-bit drawing buffer (about 1.7 KB).
+Scaled text resets to size 1 after each draw. Static hashes track the visible
+market/entity/world item, so an update to an unseen item does not clear its card.
+Full page changes retain the existing transition behavior. The low-memory direct
+drawing fallback remains available; no whole-screen framebuffer is introduced.
+
+The web control labels now say Footer IP and Seconds per screen, with a note
+about the item sequence. README describes the updated button and rotation behavior.
+
+Verification
+
+pio run: PASS. Static RAM: 50,708 bytes (61.9%), flash: 735,111 bytes (70.4%).
+Binary: 739,264 bytes. SHA256:
+7cdaaa1de356647618a1450af70ab80a66a293b9fa2cd51d0592983afc8e964e
+
+python3 audit/reproduce.py: PASS, 20 suites (18 Python and 2 Node).
+The new device-ui-preview.py executes actual firmware layout/navigation/hash
+functions with the TFT library's real bitmap fonts and metrics. It verifies all
+nine screens in all three palettes, text bounds/minimum size, readable main
+values, sparse item selection, single-section wraparound, hidden-item hashes,
+long/negative/stale/error/empty values, seconds/12-hour clock mode, and buffer
+fallback. It exports the actual glyph pixels in assets/device-ui-*.png.
+These boards are rendered previews, not photographs of the device.
+
+Chromium browser tests: PASS, generated gzipped dashboard HTML at 320/375/1280px,
+all six tabs and OTA, focus behavior and preview/save failure recovery.
+git diff --check: PASS.
+
+Native device
+
+The standing user approval authorizes flashing. The previously verified private
+4 MB backup remains available. Application-only flashing preserves saved settings.
+write-device-ui-redesign.log: 739,264 bytes written, esptool hash verification passes.
+device-ui-redesign-boot.log: continuous timestamped 100-second capture.
+Both logs are private under /home/intra/.local/state/geekmagic-backups/.
+
+Settings validation succeeds. Display init leaves 28,000 free DRAM bytes;
+IRAM free/largest remains 18,824. Webserver starts, WiFi connects, deferred time,
+mDNS and OTA start. The clock buffer allocates successfully. Weather succeeds
+at 22.711 s; BTC/MSFT/NVDA HTTPS feeds succeed at 25.521/27.726/32.342 s.
+The drawing buffer is restored at 32.750 s. Boot stability passes at 34.356 s:
+DRAM free 18,248 bytes, largest block 17,384, fragmentation 5%. No exception,
+watchdog reset or repeated boot appears during the capture.
+
+Remaining physical assessment
+
+Native startup and pixel-accurate previews prove implementation and layout bounds,
+not readability for every person at a distance. The user was asked to assess the
+market percentage, temperature and footer from their usual viewing position.
+That feedback has not arrived yet. Metadata remains smaller than the primary
+values because the panel is physically small; no universal distance guarantee
+or claim of physically verified flicker elimination is made.
