@@ -20,9 +20,9 @@ int delays=0,recoverAfter=0,cancelAfter=0;
 uint32_t millis(){return clockMs;}
 void delay(unsigned ms);
 struct HeapSelectIram {int previous=heap;HeapSelectIram(){heap=1;}~HeapSelectIram(){heap=previous;}};
-uint32_t freeBytes[2]={14728,18000},maxBytes[2]={14000,18000};
+uint32_t freeBytes[2]={20728,18000},maxBytes[2]={14000,18000};
 struct {void getHeapStats(uint32_t *free,uint32_t *largest){*free=freeBytes[heap];*largest=maxBytes[heap];}} ESP;
-void delay(unsigned ms){clockMs+=ms;++delays;if(recoverAfter&&delays>=recoverAfter){freeBytes[0]=14728;maxBytes[0]=14000;}if(cancelAfter&&delays>=cancelAfter)feedJobsCancelled=true;}
+void delay(unsigned ms){clockMs+=ms;++delays;if(recoverAfter&&delays>=recoverAfter){freeBytes[0]=20728;maxBytes[0]=14000;}if(cancelAfter&&delays>=cancelAfter)feedJobsCancelled=true;}
 '''
 for constant in ['kHttpsMinFreeHeapBytes','kHttpsMinDramHeapBytes','kHttpsMinDramBlockBytes','kHttpsHeapWaitMs','kHttpsDefaultRecvBufferBytes']:
     code+=re.search(r'constexpr uint(?:32|16)_t '+constant+r' = [^;]+;',source).group(0)
@@ -31,18 +31,22 @@ code+=r'''
 int main(){
 #ifdef UMM_HEAP_IRAM
  assert(tlsHeapReady());assert(heap==0);
+ // Captured WiFi-driver crash admitted by the old gate; preserve SDK headroom.
+ freeBytes[0]=19576;maxBytes[0]=19000;freeBytes[1]=18824;maxBytes[1]=18824;
+ assert(!tlsHeapReady());
+ freeBytes[0]=20000;maxBytes[0]=12000;assert(tlsHeapReady());
  // Captured Sync-all failure: enough combined RAM but insufficient DRAM
  // for the crypto stack, SSL engine and 1,496-byte certificate validator.
  freeBytes[0]=12808;maxBytes[0]=12808;freeBytes[1]=18824;maxBytes[1]=18824;
  assert(!tlsHeapReady());assert(heap==0);
- freeBytes[0]=14728;maxBytes[0]=14000;freeBytes[1]=18000;maxBytes[1]=18000;
+ freeBytes[0]=20728;maxBytes[0]=14000;freeBytes[1]=18000;maxBytes[1]=18000;
  freeBytes[0]=7000;maxBytes[0]=7000;freeBytes[1]=20000;maxBytes[1]=20000;
  assert(!tlsHeapReady());assert(heap==0);
- freeBytes[0]=14728;maxBytes[0]=14000;freeBytes[1]=18000;maxBytes[1]=18000;
+ freeBytes[0]=20728;maxBytes[0]=14000;freeBytes[1]=18000;maxBytes[1]=18000;
  maxBytes[1]=16000;assert(!tlsHeapReady());assert(heap==0);
  maxBytes[1]=18000;freeBytes[0]=4000;assert(!tlsHeapReady());assert(heap==0);
  freeBytes[0]=25000;maxBytes[0]=17000;freeBytes[1]=1000;maxBytes[1]=1000;assert(!tlsHeapReady());
- freeBytes[0]=33000;maxBytes[0]=20000;assert(tlsHeapReady());
+ freeBytes[0]=40000;maxBytes[0]=20000;assert(tlsHeapReady());
  maxBytes[0]=11000;assert(!tlsHeapReady());
  String error;
  freeBytes[0]=12808;maxBytes[0]=12808;freeBytes[1]=18000;maxBytes[1]=18000;
@@ -55,7 +59,7 @@ int main(){
  uint32_t began=clockMs;assert(!waitForTlsHeap(nullptr));assert(clockMs-began==kHttpsHeapWaitMs&&heap==0);
 #else
  assert(!tlsHeapReady());freeBytes[0]=25000;maxBytes[0]=17000;assert(!tlsHeapReady());
- freeBytes[0]=33000;maxBytes[0]=20000;assert(tlsHeapReady());
+ freeBytes[0]=40000;maxBytes[0]=20000;assert(tlsHeapReady());
  maxBytes[0]=16000;assert(!tlsHeapReady());
 #endif
 }

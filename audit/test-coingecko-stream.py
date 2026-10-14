@@ -68,7 +68,7 @@ int main(){
  std::string payload="{\"coins\" : ["+coins+"],\"exchanges\":[]}";
  {JsonDocument all,filter;buildCoinGeckoSearchFilter(filter);Input input(payload);assert(!deserializeJson(all,input,DeserializationOption::Filter(filter.as<JsonVariantConst>())));assert(peak>100000);std::printf("Full-array JSON peak: %zu bytes\n",peak);}
  assert(allocated==0);peak=0;
- {JsonDocument best;Input input(payload);assert(!readCoinGeckoSearch(input,best,"btc"));assert(best["id"]=="bitcoin");assert(best["ignored"].isNull());assert(peak<10000);std::printf("Streamed JSON peak: %zu bytes\n",peak);}
+ {JsonDocument best;Input input(payload);assert(!readCoinGeckoSearch(input,best,"btc"));assert(best["id"]=="bitcoin");assert(best["ignored"].isNull());assert(peak<4000);std::printf("Streamed JSON peak: %zu bytes\n",peak);}
  assert(allocated==0);peak=0;
  {JsonDocument best;Input input("{\"coins\":[{\"id\":\"btc\",\"symbol\":\"other\",\"market_cap_rank\":999},{\"id\":\"bitcoin\",\"symbol\":\"btc\",\"market_cap_rank\":1}]}");assert(!readCoinGeckoSearch(input,best,"btc"));assert(best["id"]=="btc");}
  {JsonDocument best;Input input("{\"coins\": []}");assert(!readCoinGeckoSearch(input,best,"btc"));assert(best.isNull());}

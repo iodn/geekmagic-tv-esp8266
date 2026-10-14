@@ -29,8 +29,8 @@ constexpr uint16_t kHomeAssistantMinRefreshMinutes = 1;
 constexpr uint16_t kHomeAssistantMaxRefreshMinutes = 240;
 constexpr uint32_t kHttpTimeoutMs = 12000;
 constexpr uint32_t kFeedStartupGracePeriodMs = 15000UL;
-constexpr uint32_t kHttpsMinFreeHeapBytes = 32000UL;
-constexpr uint32_t kHttpsMinDramHeapBytes = 14000UL;
+constexpr uint32_t kHttpsMinFreeHeapBytes = 38000UL;
+constexpr uint32_t kHttpsMinDramHeapBytes = 20000UL;
 constexpr uint32_t kHttpsMinDramBlockBytes = 12000UL;
 constexpr uint32_t kHttpsHeapWaitMs = 2000UL;
 constexpr uint16_t kHttpsDefaultRecvBufferBytes = 16384;
@@ -1011,6 +1011,7 @@ bool httpGetJson(const String &url,
         if (error) *error = F("Feed job cancelled");
         return false;
     }
+    if (filter != nullptr) filter->shrinkToFit();
     struct RequestGuard {
         RequestGuard() { activeRequestStartedMs = millis(); activeRequestExpired = false; }
         ~RequestGuard() { activeHttpClient = nullptr; }
@@ -1275,6 +1276,7 @@ DeserializationError readCoinGeckoSearch(Stream &stream, JsonDocument &best, con
     if (nextToken() != ':' || nextToken() != '[') return DeserializationError::InvalidInput;
     JsonDocument filter;
     buildCoinGeckoSearchFilter(filter);
+    filter.shrinkToFit();
     JsonDocument candidate;
     int bestScore = -1;
     int bestRank = INT_MAX;
@@ -1305,6 +1307,7 @@ DeserializationError readCoinGeckoSearch(Stream &stream, JsonDocument &best, con
         int rank = coin["market_cap_rank"].isNull() ? INT_MAX : coin["market_cap_rank"].as<int>();
         if (score > bestScore || (score == bestScore && rank < bestRank)) {
             best.set(coin);
+            best.shrinkToFit();
             if (best.overflowed()) return DeserializationError::NoMemory;
             bestScore = score;
             bestRank = rank;
