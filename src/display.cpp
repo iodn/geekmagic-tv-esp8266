@@ -625,7 +625,7 @@ std::vector<String> wrapText(const String &text, int font, int maxWidth) {
     currentLine.reserve(text.length() + 4);
     currentWord.reserve(text.length() + 4);
 
-    auto flushWord = [&](bool forceLineBreak) {
+    auto flushWord = [&]() {
         if (currentWord.isEmpty()) {
             return;
         }
@@ -636,13 +636,18 @@ std::vector<String> wrapText(const String &text, int font, int maxWidth) {
         }
         candidate += currentWord;
 
-        if (forceLineBreak || tft.textWidth(candidate) > maxWidth) {
+        if (tft.textWidth(candidate) > maxWidth) {
             if (!currentLine.isEmpty()) {
                 lines.push_back(currentLine);
-                currentLine = currentWord;
-            } else {
-                lines.push_back(currentWord);
-                currentLine = "";
+            }
+            currentLine = "";
+            for (size_t index = 0; index < currentWord.length(); ++index) {
+                char character = currentWord.charAt(index);
+                if (!currentLine.isEmpty() && tft.textWidth(currentLine + character) > maxWidth) {
+                    lines.push_back(currentLine);
+                    currentLine = "";
+                }
+                currentLine += character;
             }
         } else {
             currentLine = candidate;
@@ -655,17 +660,17 @@ std::vector<String> wrapText(const String &text, int font, int maxWidth) {
         char character = text.charAt(index);
 
         if (character == '\n') {
-            flushWord(false);
+            flushWord();
             lines.push_back(currentLine);
             currentLine = "";
         } else if (character == ' ') {
-            flushWord(false);
+            flushWord();
         } else {
             currentWord += character;
         }
     }
 
-    flushWord(false);
+    flushWord();
     if (!currentLine.isEmpty()) {
         lines.push_back(currentLine);
     }
@@ -697,14 +702,26 @@ void drawWrappedCenteredText(const String &text,
                              int font,
                              uint16_t textColor,
                              uint16_t backgroundColor,
-                             int lineSpacing = 4) {
+                             int lineSpacing = 4,
+                             int maxHeight = DISPLAY_HEIGHT) {
     std::vector<String> lines = wrapText(text, font, maxWidth);
     tft.setTextDatum(TC_DATUM);
     tft.setTextFont(font);
     tft.setTextColor(textColor, backgroundColor);
-    int lineHeight = tft.fontHeight() + lineSpacing;
+    int fontHeight = tft.fontHeight();
+    int lineHeight = fontHeight + lineSpacing;
+    int availableHeight = min(maxHeight, DISPLAY_HEIGHT - startY);
+    int lineCount = availableHeight < fontHeight ? 0 : 1 + (availableHeight - fontHeight) / lineHeight;
+    size_t visibleLines = min(lines.size(), static_cast<size_t>(lineCount));
+    if (visibleLines < lines.size() && visibleLines > 0) {
+        String &lastLine = lines[visibleLines - 1];
+        while (!lastLine.isEmpty() && tft.textWidth(lastLine + "...") > maxWidth) {
+            lastLine.remove(lastLine.length() - 1);
+        }
+        lastLine += "...";
+    }
 
-    for (size_t lineIndex = 0; lineIndex < lines.size(); ++lineIndex) {
+    for (size_t lineIndex = 0; lineIndex < visibleLines; ++lineIndex) {
         tft.drawString(lines[lineIndex], centerX, startY + (lineIndex * lineHeight), font);
     }
 }
@@ -1583,7 +1600,7 @@ void renderClockPage() {
     } else if (weatherWaitingForSync()) {
         drawWrappedCenteredText("Syncing weather...", 120, 182, 192, FONT_INFO, theme.muted, theme.surfaceAlt, 2);
     } else if (clockMessage != nullptr) {
-        drawWrappedCenteredText(clockMessage, 120, 178, 192, FONT_LABEL, theme.text, theme.surfaceAlt, 2);
+        drawWrappedCenteredText(clockMessage, 120, 178, 192, FONT_LABEL, theme.text, theme.surfaceAlt, 2, 42);
     }
 }
 
@@ -1960,7 +1977,7 @@ void renderEventPage() {
     drawRoundedPanel(8, 36, 224, 184, theme.surface, theme.surfaceAlt);
 
     drawWrappedCenteredText(dashboardData.event.title[0] != '\0' ? dashboardData.event.title : "Upcoming",
-                            120, 56, 186, FONT_BODY, theme.text, theme.surface, 2);
+                            120, 46, 186, FONT_LABEL, theme.text, theme.surface, 2, 34);
     tft.fillRoundRect(104, 82, 32, 4, 2, theme.accentSoft);
 
     updateEventDynamicArea();
@@ -1973,7 +1990,7 @@ void renderEventPage() {
                                 FONT_INFO,
                                 theme.muted,
                                 theme.surface,
-                                2);
+                                2, 42);
     }
 }
 
@@ -1994,7 +2011,7 @@ void renderQuotePage() {
     tft.drawString("\"", 120, 60, FONT_BODY);
 
     drawWrappedCenteredText(safeCString(dashboardData.quote.text),
-                            120, 104, 186, FONT_LABEL, theme.text, theme.surface, 4);
+                            120, 104, 186, FONT_LABEL, theme.text, theme.surface, 4, 76);
 
     if (dashboardData.quote.author[0] != '\0') {
         int chipWidth = min(160, tft.textWidth(dashboardData.quote.author, FONT_INFO) + 20);
@@ -2026,11 +2043,11 @@ void renderStatusPage() {
     tft.setTextFont(FONT_TITLE);
     tft.setTextColor(theme.text, theme.surface);
     drawWrappedCenteredText(dashboardData.status.line1[0] != '\0' ? dashboardData.status.line1 : "Status line 1",
-                            120, 74, 184, FONT_BODY, theme.text, theme.surface, 2);
+                            120, 74, 184, FONT_BODY, theme.text, theme.surface, 2, 54);
 
     drawDividerLine(28, 132, 184, theme.surfaceAlt);
     drawWrappedCenteredText(dashboardData.status.line2[0] != '\0' ? dashboardData.status.line2 : "Status line 2",
-                            120, 150, 184, FONT_LABEL, theme.muted, theme.surface, 2);
+                            120, 150, 184, FONT_LABEL, theme.muted, theme.surface, 2, 70);
 }
 
 void renderDashboardPage() {
@@ -2320,7 +2337,7 @@ void displayUpdate() {
         const ThemePalette &theme = activeTheme();
         drawScreenChrome("SmartClock");
         drawRoundedPanel(12, 48, DISPLAY_WIDTH - 24, 176, theme.surface, theme.surfaceAlt);
-        drawWrappedCenteredText(temporaryMessage.message, 120, 92, 192, FONT_BODY, theme.text, theme.surface, 4);
+        drawWrappedCenteredText(temporaryMessage.message, 120, 92, 192, FONT_BODY, theme.text, theme.surface, 4, 128);
 
         renderCache.valid = true;
         renderCache.mode = DISPLAY_MODE_TEMP_MESSAGE;
@@ -2484,7 +2501,7 @@ void displayRenderAPMode() {
                             FONT_INFO,
                             theme.muted,
                             theme.surfaceAlt,
-                            2);
+                            2, 34);
 }
 
 void displayShowDashboard() {
@@ -2566,7 +2583,7 @@ void displayShowMessage(const String &msg) {
     const ThemePalette &theme = activeTheme();
     drawScreenChrome("SmartClock");
     drawRoundedPanel(18, 54, 204, 144, theme.surface, theme.surfaceAlt);
-    drawWrappedCenteredText(msg, 120, 96, 170, FONT_BODY, theme.text, theme.surface, 4);
+    drawWrappedCenteredText(msg, 120, 96, 170, FONT_BODY, theme.text, theme.surface, 4, 98);
     invalidateRenderCache();
 }
 
