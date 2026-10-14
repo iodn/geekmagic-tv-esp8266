@@ -60,6 +60,7 @@ public:
 class FeedHttpClient : public HTTPClient {
 public:
     WiFiClient *transportClient() const { return _client.get(); }
+    void abortTransport() { FeedSocketAccess::abortTransport(transportClient()); }
 };
 FeedTlsClient *activeTlsClient = nullptr;
 std::unique_ptr<cont_t> feedContinuation;
@@ -70,7 +71,7 @@ bool feedJobComplete = false;
 bool feedJobsCancelled = false;
 bool lastSyncSuccess = false;
 String lastSyncError;
-WiFiClient *activeHttpClient = nullptr;
+FeedHttpClient *activeHttpClient = nullptr;
 uint32_t activeRequestStartedMs = 0;
 bool activeRequestExpired = false;
 FeedSearchStatus searchStatus = FEED_SEARCH_IDLE;
@@ -986,7 +987,7 @@ bool httpGetJson(const String &url,
         ~RequestGuard() { activeHttpClient = nullptr; }
     } requestGuard;
     struct ActiveClientGuard {
-        explicit ActiveClientGuard(WiFiClient *client) { activeHttpClient = client; }
+        explicit ActiveClientGuard(FeedHttpClient *client) { activeHttpClient = client; }
         ~ActiveClientGuard() { activeHttpClient = nullptr; activeTlsClient = nullptr; }
     };
     auto finishJsonRequest = [&](HTTPClient &http, const char *transportLabel) {
@@ -1070,7 +1071,7 @@ bool httpGetJson(const String &url,
             }
             return false;
         }
-        ActiveClientGuard activeGuard(http.transportClient());
+        ActiveClientGuard activeGuard(&http);
 
         return finishJsonRequest(http, "HTTP");
     }
@@ -1126,7 +1127,7 @@ bool httpGetJson(const String &url,
         }
         return false;
     }
-    ActiveClientGuard activeGuard(http.transportClient());
+    ActiveClientGuard activeGuard(&http);
     activeTlsClient = client.get();
 
     return finishJsonRequest(http, "HTTPS");
@@ -2049,7 +2050,7 @@ void pumpFeedJob() {
     if (activeHttpClient && (feedJobsCancelled || millis() - activeRequestStartedMs >= kRequestDeadlineMs)) {
         activeRequestExpired = true;
         if (activeTlsClient) activeTlsClient->abortTransport();
-        else FeedSocketAccess::abortTransport(activeHttpClient);
+        else activeHttpClient->abortTransport();
     }
     // Every core yield suspends this worker to this call site. The main
     // continuation must be restored before returning to application code.
@@ -2220,7 +2221,7 @@ void feedsCancelJobs() {
     if (activeHttpClient) {
         activeRequestExpired = true;
         if (activeTlsClient) activeTlsClient->abortTransport();
-        else FeedSocketAccess::abortTransport(activeHttpClient);
+        else activeHttpClient->abortTransport();
     }
 }
 

@@ -78,7 +78,7 @@ void cont_run(cont_t *c, void (*worker)()) {
 }
 void cont_check(cont_t*) {}
 struct WiFiClient { bool aborted = false; void abort() { aborted = true; } };
-struct FeedSocketAccess { static void abortTransport(WiFiClient *client) { if (client) client->abort(); } };
+struct FeedHttpClient : WiFiClient { void abortTransport() { aborted = true; } };
 struct FeedTlsClient : WiFiClient { void abortTransport() { aborted = true; } };
 FeedTlsClient *activeTlsClient = nullptr;
 struct { int status() { return 3; } } WiFi;
@@ -102,7 +102,7 @@ uint16_t pendingSyncMask = 0, activeSyncMask = 0;
 bool feedJobRunning = false, feedJobComplete = false, lastSyncSuccess = false;
 bool feedJobsCancelled = false;
 String lastSyncError;
-WiFiClient *activeHttpClient = nullptr;
+FeedHttpClient *activeHttpClient = nullptr;
 uint32_t activeRequestStartedMs = 0;
 bool activeRequestExpired = false;
 constexpr uint32_t kRequestDeadlineMs = 24000;
@@ -110,7 +110,7 @@ FeedSearchStatus searchStatus = FEED_SEARCH_IDLE;
 String searchQuery, searchJson, searchError;
 constexpr uint16_t kWeatherJob=1, kHomeAssistantJob=2, kMarketJobBase=4;
 bool syncWeather(String *error) {
-    WiFiClient client;
+    FeedHttpClient client;
     activeHttpClient = &client;
     activeRequestStartedMs = millis();
     while (!client.aborted) yield();

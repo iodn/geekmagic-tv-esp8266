@@ -6,7 +6,8 @@ source=(root/'src/feeds.cpp').read_text()
 client=re.search(r'class FeedTlsClient :[\s\S]*?\n};',source).group(0)
 http_client=re.search(r'class FeedHttpClient :[\s\S]*?\n};',source).group(0)
 socket_access=re.search(r'class FeedSocketAccess :[\s\S]*?\n};',source).group(0)
-assert source.count('ActiveClientGuard activeGuard(http.transportClient());') == 2
+assert source.count('ActiveClientGuard activeGuard(&http);') == 2
+assert 'FeedHttpClient *activeHttpClient = nullptr;' in source
 code=r'''
 #include <cassert>
 #include <memory>
@@ -24,6 +25,7 @@ protected:
 struct HTTPClient {
  bool begin(WiFiClient&client){_client=client.clone();return true;}
  bool GET(){return _client && _client->connect();}
+ void end(){_client.reset();}
 protected:
  std::unique_ptr<WiFiClient> _client;
 };
@@ -50,8 +52,9 @@ int main(){
  FeedHttpClient http;assert(http.begin(plain));
  WiFiClient *active=http.transportClient();assert(active && active!=&plain);
  assert(http.GET());plain.abort();assert(active->socket.aborts==0);
- FeedSocketAccess::abortTransport(active);assert(active->socket.aborts==1);
+ http.abortTransport();assert(active->socket.aborts==1);
  assert(active->flushes==0 && client.ctx->flushes==0);
+ http.end();assert(http.transportClient()==nullptr);http.abortTransport();
  FeedSocketAccess::abortTransport(nullptr);
  WiFiClient disconnected;FeedSocketAccess::abortTransport(&disconnected);
  assert(disconnected.flushes==0 && disconnected.socket.aborts==0);
