@@ -114,12 +114,12 @@ fetches its current transport each time and handles the null state after end().
 The regression exercises cancellation after response cleanup, and all aggregate
 checks pass. This avoids retaining a freed socket pointer across SDK yields.
 
-Latest normal release source: 9d8152e. Deadline: 24,000 ms.
+Previous normal release source: 9d8152e. Deadline: 24,000 ms.
 Build: PASS. Static RAM: 50,752 bytes (62.0%). Flash: 736,763 bytes (70.5%).
 Binary: 740,912 bytes. SHA256:
 167086eef6be7ced9d8009da4935ab29581f470ae557bd347f6a6e30d5257f39
 
-Latest flashed-image verification
+Previous flashed-image verification
 
 write-http-lifetime.log: 740,912 bytes written; esptool hash verification passes.
 http-lifetime-boot.log: saved settings load, WiFi connects, time/mDNS/OTA start,
@@ -130,3 +130,47 @@ No exception or watchdog reset appears during the 85-second capture.
 Both logs are private under /home/intra/.local/state/geekmagic-backups/.
 Network reachability was rechecked with proxies bypassed and still fails.
 Physical flicker and authenticated web API/mixed-request checks remain unverified.
+
+Complete native cancellation batch — 2026-10-14
+
+A temporary build of source 9d8152e set only kRequestDeadlineMs to 1 ms.
+Normal source was restored in a finally block after the diagnostic build.
+write-complete-timeout.log: application-only flash hash verification passes.
+complete-timeout-boot.log: a single continuous, timestamped 130-second capture.
+Boot succeeds; saved settings, WiFi, time services, mDNS and OTA initialize.
+The HTTP request fails at 33.587 s. Three HTTPS attempts fail at 48.449 s,
+63.498 s and 78.554 s. The job reports failure at 78.555 s and restores the
+216x64 clock buffer at 78.956 s with 18,712 free DRAM bytes.
+DRAM before successive TLS attempts returns to 15,080 bytes, combined with
+18,824 bytes IRAM. No exception, watchdog reset or repeated boot is observed.
+The entire first batch returns, completing the earlier partial fault capture.
+Pending connection waits still take about 15 seconds; a 1 ms deadline does not
+prove immediate cancellation of DNS/TCP waits. Display/service continuity is
+supported by startup/stability logs, not direct observation of visible frames.
+
+The fault exposed misleading error text: the deadline abort was reported as
+HTTP -1 connection failed. c367a61 preserves deadline and user-cancellation
+reasons when GET fails, and prevents a subsequent SSL diagnostic overriding
+those reasons. Existing ordinary HTTP/TLS error details are preserved.
+The new regression executes the actual firmware error branch and reproduced
+the failure before the fix. It checks deadline, cancellation, SSL precedence,
+ordinary HTTP errors, null error output, cleanup and successful response status.
+All 19 host suites pass (17 Python and 2 Node). Normal firmware build passes.
+
+Latest release source: c367a61. Request deadline restored to 24,000 ms.
+Static RAM: 50,752 bytes (62.0%). Flash: 736,827 bytes (70.5%).
+Binary: 740,976 bytes. SHA256:
+9dc088f0ab6456eca496a488f221d6eeaff7d8a400bf27695260a39b6a7c1efc
+
+Latest normal-image recovery
+
+write-feed-errors.log: 740,976 bytes written, hash verified.
+feed-errors-release-boot.log: single timestamped 85-second startup capture.
+WiFi/time/mDNS/OTA initialize; weather succeeds at 22.506 s and market slots
+0/1/2 succeed at 25.514/27.520/29.727 s. Clock sprite is restored at 30.731 s.
+Boot stability passes at 34.342 s, free DRAM 18,552 bytes, largest block 17,656,
+fragmentation 5%; IRAM free/largest 18,824 bytes. No reset or exception follows.
+Saved settings and the normal 24-second deadline are preserved. These private
+logs are under /home/intra/.local/state/geekmagic-backups/.
+The physical screen and authenticated web API/mixed-request checks remain
+unverified; direct HTTP access to the TV is still unavailable from this computer.

@@ -165,3 +165,12 @@ All 18 host suites pass. The final normal-deadline image is flashed and native
 weather/all three market requests and boot stability pass. Hardware verification
 is recorded in hardware-verification.txt; the remaining screen and network-access
 checks above still apply. No claim of physical flicker elimination is made.
+
+The complete 130-second native timeout capture now proves the first cancelled
+weather/three-market batch unwinds and restores the clock buffer. Pending
+connection attempts can still take around 15 seconds. c367a61 corrects misleading
+timeout/cancellation errors; the actual response branch passes new fault tests.
+All 19 host suites pass. Normal firmware is restored and native weather, all
+three market requests and boot stability pass again. Current source/image/log
+identifiers are recorded in hardware-verification.txt. Screen and web API
+verification remain incomplete.
