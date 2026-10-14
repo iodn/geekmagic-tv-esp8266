@@ -47,6 +47,22 @@ struct HttpJsonRequestOptions {
 // has no base socket, and abort() would otherwise flush TLS while suspended.
 class FeedTlsClient : public BearSSL::WiFiClientSecureCtx {
 public:
+    int connect(const char *host, uint16_t port) override {
+        IPAddress address;
+        if (!WiFi.hostByName(host, address)) {
+            logPrintf(F("TLS DNS lookup failed: %s"), host);
+            return 0;
+        }
+        if (!WiFiClient::connect(address, port)) {
+            logPrintf(F("TLS TCP connection failed: %s"), host);
+            return 0;
+        }
+        if (!_connectSSL(host)) {
+            logPrintf(F("TLS handshake failed: %s"), host);
+            return 0;
+        }
+        return 1;
+    }
     void abortTransport() { if (_client) _client->abort(); }
 };
 FeedTlsClient *activeTlsClient = nullptr;

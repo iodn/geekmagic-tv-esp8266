@@ -21,6 +21,7 @@ for name in (
     'regression-dashboard.py',
     'feed-regressions.py',
     'test-tls-heap.py',
+    'test-tls-client.py',
     'regression-network.py',
     'regression-webserver.py',
     'test-api-script.py',
