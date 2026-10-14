@@ -1,6 +1,10 @@
 GeekMagic firmware audit
 Reviewed 2026-10-14 at d5f1386
 
+This is the original findings record. Implemented fixes and current verification
+are recorded in audit/fix-verification.txt; the diagnostic entry points now run
+regressions that expect the corrected behavior.
+
 Scope and evidence
 
 Reviewed startup and recovery, EEPROM and filesystem persistence, authentication,

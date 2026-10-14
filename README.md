@@ -16,7 +16,7 @@ The project has been tested on the GeekMagic SmallTV Ultra ESP8266 variant. Othe
 
 - Authenticated web dashboard for display, feed, network, OTA, and system management
 - ST7789 240x240 display support through TFT_eSPI
-- Captive portal WiFi setup with randomized setup AP password
+- Captive portal WiFi setup with randomized setup AP password and cooperative station retries
 - mDNS discovery using the configured device hostname
 - ArduinoOTA and web OTA using the current admin password
 - LittleFS persistence for dashboard, feed, and authentication configuration
@@ -24,7 +24,7 @@ The project has been tested on the GeekMagic SmallTV Ultra ESP8266 variant. Othe
 - NTP time synchronization with configurable UTC offset
 - Day and night display profiles with scheduled brightness and theme options
 - Multi-page display: clock, weather, markets, Home Assistant, focus timer, world clocks, event countdown, quote, and status pages
-- Open-Meteo weather, Finnhub or CoinGecko market feeds, and Home Assistant REST polling
+- Open-Meteo weather, Finnhub or CoinGecko market feeds, and queued Home Assistant REST polling with per-entity errors and freshness
 - Temporary JPEG upload and rendering
 - Factory reset from the dashboard or by five quick power cycles
 
@@ -262,7 +262,7 @@ To trigger the power-cycle factory reset, power cycle the device five times in q
 - A random 10-digit admin password is generated when auth storage is missing.
 - Password hashes are stored in `/auth.json`.
 - Session cookies are HTTP-only, strict same-site cookies with a 12-hour maximum age.
-- The current admin password is also used for ArduinoOTA.
+- The current admin password is also used for ArduinoOTA. Changing it stops the old OTA service and restarts the device after saving the new credential.
 - HTTP traffic is not encrypted.
 
 Use the device only on trusted networks. Do not expose the dashboard or API directly to the internet.
@@ -342,10 +342,16 @@ Protected feed endpoints:
 | POST | `/feeds/save` | Persist feed configuration |
 | POST | `/feeds/discard` | Discard feed draft changes |
 | POST | `/feeds/reset` | Reset feed configuration |
-| POST | `/feeds/sync?scope=all` | Sync feeds |
-| GET | `/feeds/search?query=<text>` | Search weather locations |
+| POST | `/feeds/sync?scope=all` | Queue a feed sync (202); poll `/feeds/job` |
+| GET | `/feeds/job` | 202 while pending; 200 with feed state and `meta.lastSyncSuccess` / `meta.lastSyncError` when finished |
+| GET | `/feeds/search?query=<text>` | Queue weather search (202) |
+| GET | `/feeds/search` | Poll search: 202 pending, 200 results, 502 failure |
 
 Supported sync scopes are `all`, `weather`, `markets`, `home`, and `home-assistant`.
+
+Configuration changes return 409 while a feed job is running; wait for `/feeds/job` before retrying. Network changes cancel and unwind active feed work before changing interfaces. Home Assistant slots expose their own error, attempt/success ages, and stale flag; cached values remain visible when a poll fails.
+
+The `hostName` returned by state endpoints is the active address. Renaming the device also returns `configuredHostName` and `rebootRequired` in `/app.json`; restart the device to apply its new network identity.
 
 Protected image endpoints:
 
@@ -362,7 +368,8 @@ Protected network and system endpoints:
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/scan` | Scan WiFi networks |
+| GET | `/scan?start=1` | Start an asynchronous WiFi scan |
+| GET | `/scan` | Poll scan: 202 pending, 200 network array, 502 failure |
 | POST | `/connect` | Connect to WiFi network |
 | POST | `/reconfigurewifi` | Clear WiFi credentials and restart to setup mode |
 | POST | `/factoryreset` | Factory reset and restart |
@@ -434,7 +441,9 @@ Main modules:
 | `button.cpp` | Button debounce and short/long press handling |
 | `logger.cpp` | Serial and in-memory logs |
 
-The ESP8266 runtime is cooperative. Long operations should yield, avoid large allocations, and avoid excessive filesystem writes.
+The ESP8266 runtime is cooperative. Outgoing HTTP/TLS feed work runs on a separate 4 KB continuation stack and yields back to the main loop during network waits and JSON streaming. Requests have a 24-second overall deadline and a 128 KiB response limit. The ESP8266 platform is pinned to 4.2.1 (Arduino core 3.1.2) because this worker uses the core continuation API. Review that API and cancellation behavior before upgrading the platform.
+
+Setup mode keeps its AP and wildcard DNS available while station connection attempts progress without waiting in the main loop. Saved credentials are replaced only after a requested connection succeeds. Configuration and image files are validated before atomic replacement. Long operations should yield, avoid large allocations, and avoid excessive filesystem writes.
 
 ## Contributing
 
@@ -446,7 +455,21 @@ Before submitting changes:
 pio run
 ```
 
-Recommended validation:
+Host regressions (requires gcc/g++, Node.js, curl, jq, and Python Pillow):
+
+```bash
+python3 audit/reproduce.py
+```
+
+These checks use current source functions, network/filesystem mocks, and the real JPEG decoder. They do not contact a device. For authenticated API checks on a device with no existing display draft:
+
+```bash
+SMARTCLOCK_PASSWORD='YOUR_ADMIN_PASSWORD' ./test-api.sh <device-ip>
+```
+
+The API script previews brightness and restores it without saving.
+
+Recommended device validation:
 
 - Serial upload succeeds.
 - Device boots without reset loops.

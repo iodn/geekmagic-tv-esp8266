@@ -1,0 +1,142 @@
+GeekMagic firmware fix verification
+
+All 27 numbered findings have implementation commits. Each implementation commit
+names its finding; additional commits complete shared integration and tests. The
+original audit is preserved as a historical record. Firmware has not been flashed
+or pushed to GitHub by this work.
+
+Verification performed
+
+The aggregate command is:
+  python3 audit/reproduce.py
+
+It runs these current-source checks and stops on any failure:
+* test-auth.py: complete/short/overflow writes, atomic replacement, temp recovery,
+  failed-save rollback and successful password rotation surviving initialization.
+* regression-dashboard.py: countdown anchors/pause, preview persistence, complete
+  atomic saves and NTP initialization without committing drafts.
+* regression-ui.cjs: actual embedded JavaScript syntax, sparse timer fields,
+  serialized operations, newer edit generations and queued response polling.
+* feed-regressions.py: integer boundaries, complete numeric parsing, individual
+  errors/freshness, first-poll errors, source-extracted continuation pump tested
+  with native ucontext, deadlines, cancellation, body limits and yielding parser.
+* regression-network.py: current main and manual WiFi state machines, previous
+  credentials, RAM-only candidates, successful persistence, retry timing, AP/DNS
+  lifetime, no startup waiting, and failed mDNS retries.
+* regression-webserver.py: actual handlers for active hostname/restart-needed,
+  changed-only NTP setup, malformed API text, password/OTA shutdown, asynchronous
+  scan and feed routes, upload busy guards and incomplete OTA cleanup.
+* test-api-script.py: actual bash/curl/jq client against a localhost HTTP fixture,
+  cookie authentication, expected status/value assertions, no-draft refusal,
+  brightness preview restoration and failure cleanup. No device is contacted.
+* test-display.py: numeric glyph coverage, 1 bpp color mapping, actual HA card
+  rendering with mocked font metrics, vertical bounds, first-poll Error, cached
+  stale age, image invalidation, overlay expiry and focus progress.
+* test-upload.py: actual upload route with storage fault injection, oversized
+  paths, aborts, complete byte counts, JPEG verdict, atomic replacement and cache.
+* test-jpeg.py: actual installed Tiny JPEG decoder plus current validator against
+  generated baseline JPEGs, malformed/truncated data, markers, dimensions,
+  yielding callbacks, restoration and absence of drawing during validation.
+
+Host checks require Python 3 with Pillow, gcc/g++, Node.js, bash, curl, jq, and
+installed PlatformIO dependencies from pio run. Mocks exercise boundary failures;
+native ucontext does not execute the device's Xtensa continuation assembly.
+
+Firmware validation
+
+pio run succeeds against pinned espressif8266 4.2.1 / Arduino core 3.1.2.
+Final build: 53,240 / 81,920 bytes RAM (65.0%) and
+857,155 / 1,044,464 bytes flash (82.1%). The audit baseline was 54,208 bytes RAM
+and 892,615 bytes flash, so reported static RAM decreased 968 bytes and flash
+35,460 bytes (about 34.6 KiB). These are build measurements, not heap telemetry.
+All ten host regression suites passed after the final source changes.
+The platform pin is required by the core continuation API. The outgoing worker
+uses an additional dynamically allocated 4 KB stack while active; the build RAM
+percentage is not runtime free heap. Safe default TLS receive buffers are retained.
+
+Compatibility and behavior
+
+Feed sync and weather search now return 202 when queued. /feeds/job polls sync
+completion; /feeds/search without a query polls search completion. Scans start
+with /scan?start=1 and poll /scan. Configuration changes return 409 until feed
+work is idle. The included dashboard handles those statuses. See README.md.
+
+Renaming returns the actual hostName plus configuredHostName/rebootRequired;
+a restart applies the new identity. Successful password changes stop the old OTA
+service immediately and queue a restart. The new password is durable before this
+response. Incoming OTA cannot begin while outgoing feed work is suspended.
+
+Setup mode retains a password-protected AP and wildcard DNS during cooperative
+station attempts. Failed manual candidates never replace persisted credentials.
+Configuration and JPEG replacements keep the old file until a complete validated
+replacement is committed by LittleFS rename.
+
+Implementation commits by finding
+
+ 1. Integer formatting removes significant zeros.
+    Implemented: 8c2d75c, c6179c1
+ 2. Unrelated dashboard edits restart focus and event countdowns.
+    Implemented: ccb9344
+ 3. Short JSON writes can replace valid settings and report success.
+    Implemented: 444c7dc
+ 4. Entering initial failsafe mode erases the station credentials.
+    Implemented: 025aabd
+ 5. Password rotation leaves ArduinoOTA using the previous password.
+    Implemented: 80e5fa4
+ 6. A non-string compatibility API field can crash the device.
+    Implemented: 8da16a6
+ 7. Network work stalls the cooperative main loop.
+    Implemented: dafbb13, 32e55a9
+ 8. Replacement files are not committed atomically; auth cannot recover temp.
+    Implemented: b6645bb
+ 9. Failed password saves still change the active password.
+    Implemented: 3e6ab42
+10. Partial Home Assistant failures disappear.
+    Implemented: 589ffa8, 08ce972
+11. Cached Home Assistant values can look fresh after repeated failures.
+    Implemented: 40116cd
+12. Valid empty Home Assistant states are rejected as incomplete payloads.
+    Implemented: a05dd96
+13. The strict numeric parser validates a truncated input.
+    Implemented: fa2addc
+14. Clock sprite colors use RGB565 values as palette indexes.
+    Implemented: a4e5109
+15. Numeric-only fonts still hide characters outside the fixed HA text path.
+    Implemented: 5fd9f3e
+16. A failed periodic failsafe reconnect can leave the AP disabled.
+    Implemented: 69ceb39
+17. Image uploads silently accept incomplete files and truncate paths.
+    Implemented: 0140d01
+18. Overwriting a displayed image at the same path does not refresh it.
+    Implemented: 4d514f5, eaaf312
+19. A temporary message over an image may never expire on screen.
+    Implemented: 4530b10
+20. Time synchronization can persist unsaved widget previews.
+    Implemented: 62e913a
+21. Editing while Save is pending can incorrectly mark new changes saved.
+    Implemented: 7050580
+22. New hostnames are reported before network services adopt them.
+    Implemented: 1682d68
+23. mDNS initialization failure is treated as successful initialization.
+    Implemented: 2244e95
+24. Focus progress starts at 100 percent instead of zero.
+    Implemented: 1b05e46
+25. Every full dashboard preview restarts NTP configuration.
+    Implemented: 30a39ed
+26. The existing API test script cannot validate the current API.
+    Implemented: 2dcb220
+27. Home Assistant numeric fonts can overrun compact cards vertically.
+    Implemented: 14dfff9
+
+Device checks remaining
+
+Verify on the TV: AP/DNS connectivity during outages and retries; old/new OTA
+credentials after rotation; actual TLS/pinning and Xtensa coroutine stability;
+serial free heap/largest allocation during mixed polling and dashboard requests;
+real flash exhaustion/power interruption; colors and compact HA layouts; image
+replacement and overlay expiry. None of the host checks proves these hardware
+conditions. Implementation and build completion do not mean a device flash was
+performed or that the firmware is free of every possible defect.
+
+The audit's separately listed optional compression and password-hash hardening
+are outside the requested 27 numbered fixes. They have not been implemented here.
