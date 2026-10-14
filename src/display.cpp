@@ -1696,7 +1696,9 @@ void drawHomeAssistantCard(int x,
     tft.fillRoundRect(x + 10, y + 10, 26, 4, 2, theme.accentSoft);
 
     const int labelFonts[] = {FONT_LABEL, FONT_INFO};
-    const int valueFonts[] = {FONT_TITLE, FONT_BODY, FONT_LABEL, FONT_INFO};
+    // Font 6 is digits plus a, p, and m. Words such as "Home" collapse to "m".
+    const int numericValueFonts[] = {FONT_TITLE, FONT_BODY, FONT_LABEL, FONT_INFO};
+    const int textValueFonts[] = {FONT_BODY, FONT_LABEL, FONT_INFO};
     const int unitFonts[] = {FONT_INFO};
     const HomeAssistantSlotData *slot = feedsHomeAssistantSlotData(slotIndex);
     int labelY = y + 18;
@@ -1743,13 +1745,19 @@ void drawHomeAssistantCard(int x,
         stateColor = theme.muted;
     }
 
+    const bool numericValue = slot != nullptr && slot->hasData && slot->numeric;
+    const int *valueFonts = numericValue ? numericValueFonts : textValueFonts;
+    const size_t valueFontCount = numericValue
+        ? sizeof(numericValueFonts) / sizeof(numericValueFonts[0])
+        : sizeof(textValueFonts) / sizeof(textValueFonts[0]);
+
     drawAdaptiveText(stateText,
                      x + (width / 2),
                      stateY,
                      width - 20,
                      TC_DATUM,
                      valueFonts,
-                     sizeof(valueFonts) / sizeof(valueFonts[0]),
+                     valueFontCount,
                      stateColor,
                      fillColor);
 
