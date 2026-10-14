@@ -1512,6 +1512,7 @@ String normalizeHomeAssistantStateForDisplay(const String &rawState, bool &numer
     float numericValue = 0.0f;
     if (parseFloatStrict(trimmedState, numericValue)) {
         numeric = true;
+        if (trimmedState.indexOf('.') < 0 && trimmedState.indexOf('e') < 0 && trimmedState.indexOf('E') < 0) return groupThousandsString(trimmedState);
         return formatHomeAssistantNumericState(numericValue);
     }
 
