@@ -33,6 +33,7 @@ void displayUpdate();
 void displayRenderClock();
 void displayRenderAPMode();
 void displayRenderImage(const char *path);
+bool displayValidateImage(const char *path);
 void displayInvalidateImage(const char *path);
 void displayServiceTemporaryMessage();
 void displayShowMessage(const String &msg);

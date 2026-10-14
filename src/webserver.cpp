@@ -40,6 +40,7 @@ unsigned long rebootRequestedAtMs = 0;
 String uploadErrorMessage;
 int uploadStatusCode = 200;
 char uploadTargetPath[DISPLAY_PATH_BUFFER_SIZE] = {0};
+char uploadTempPath[DISPLAY_PATH_BUFFER_SIZE + 4] = {0};
 String authSessionToken;
 unsigned long authSessionLastSeenMs = 0;
 int lastEffectiveBrightness = -1;
@@ -381,6 +382,12 @@ bool setCurrentImageSelection(const String &requestedPath, String *error = nullp
         return false;
     }
 
+    if (imagePath.length() >= sizeof(currentImage)) {
+        if (error != nullptr) {
+            *error = "Image path is too long";
+        }
+        return false;
+    }
     if (imagePath.length() > 0 && !LittleFS.exists(imagePath)) {
         if (error != nullptr) {
             *error = "Image not found";
@@ -1021,49 +1028,76 @@ void handleFileUpload() {
     HTTPUpload &upload = server.upload();
 
     if (upload.status == UPLOAD_FILE_START) {
+        if (uploadFile) {
+            uploadFile.close();
+        }
+        if (uploadTempPath[0] != '\0') {
+            LittleFS.remove(uploadTempPath);
+        }
         uploadErrorMessage = "";
         uploadStatusCode = 200;
         uploadTargetPath[0] = '\0';
+        uploadTempPath[0] = '\0';
 
         String safeFilename;
         if (!sanitizeUploadFilename(upload.filename, safeFilename, &uploadErrorMessage)) {
             uploadStatusCode = 400;
-            logPrintf("ERROR: Upload rejected: %s", uploadErrorMessage.c_str());
             return;
         }
-
         String filePath = String(IMAGE_DIR) + safeFilename;
-        strncpy(uploadTargetPath, filePath.c_str(), sizeof(uploadTargetPath) - 1);
-        uploadTargetPath[sizeof(uploadTargetPath) - 1] = '\0';
-        uploadFile = LittleFS.open(uploadTargetPath, "w");
-
+        if (filePath.length() >= sizeof(uploadTargetPath)) {
+            uploadStatusCode = 400;
+            uploadErrorMessage = "Image filename is too long";
+            return;
+        }
+        copyString(uploadTargetPath, sizeof(uploadTargetPath), filePath.c_str());
+        snprintf(uploadTempPath, sizeof(uploadTempPath), "%s.tmp", uploadTargetPath);
+        uploadFile = LittleFS.open(uploadTempPath, "w");
         if (!uploadFile) {
             uploadStatusCode = 500;
             uploadErrorMessage = "Failed to open upload target";
-            logPrintf("ERROR: Failed to open file %s for writing", uploadTargetPath);
-            uploadTargetPath[0] = '\0';
-        } else {
-            logPrintf("INFO: Upload started for %s", uploadTargetPath);
         }
     } else if (upload.status == UPLOAD_FILE_WRITE) {
-        if (uploadFile) {
-            uploadFile.write(upload.buf, upload.currentSize);
+        if (uploadStatusCode == 200 && uploadFile &&
+            uploadFile.write(upload.buf, upload.currentSize) != upload.currentSize) {
+            uploadStatusCode = 507;
+            uploadErrorMessage = "Incomplete image write";
         }
     } else if (upload.status == UPLOAD_FILE_ABORTED) {
         if (uploadFile) {
             uploadFile.close();
         }
-        if (uploadTargetPath[0] != '\0') {
-            LittleFS.remove(uploadTargetPath);
+        if (uploadTempPath[0] != '\0') {
+            LittleFS.remove(uploadTempPath);
         }
         uploadStatusCode = 400;
         uploadErrorMessage = "Upload aborted";
         uploadTargetPath[0] = '\0';
+        uploadTempPath[0] = '\0';
     } else if (upload.status == UPLOAD_FILE_END) {
         if (uploadFile) {
+            uploadFile.flush();
+            if (uploadStatusCode == 200 && uploadFile.size() != upload.totalSize) {
+                uploadStatusCode = 507;
+                uploadErrorMessage = "Incomplete image upload";
+            }
             uploadFile.close();
-            logPrintf("INFO: Upload complete: %s (%u bytes)", uploadTargetPath, upload.totalSize);
+        } else if (uploadStatusCode == 200) {
+            uploadStatusCode = 500;
+            uploadErrorMessage = "Image upload did not start";
         }
+        if (uploadStatusCode == 200 && !displayValidateImage(uploadTempPath)) {
+            uploadStatusCode = 400;
+            uploadErrorMessage = "Invalid or incomplete JPEG";
+        }
+        if (uploadStatusCode == 200 && !LittleFS.rename(uploadTempPath, uploadTargetPath)) {
+            uploadStatusCode = 500;
+            uploadErrorMessage = "Failed to commit image";
+        }
+        if (uploadStatusCode != 200 && uploadTempPath[0] != '\0') {
+            LittleFS.remove(uploadTempPath);
+        }
+        uploadTempPath[0] = '\0';
     }
 }
 

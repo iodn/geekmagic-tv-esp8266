@@ -2476,6 +2476,38 @@ void displayServiceTemporaryMessage() {
     }
 }
 
+bool displayValidateImage(const char *path) {
+    if (path == nullptr || !LittleFS.exists(path)) {
+        return false;
+    }
+
+    File file = LittleFS.open(path, "r");
+    if (!file) {
+        return false;
+    }
+    bool complete = file.size() >= 4 && file.read() == 0xFF && file.read() == 0xD8 &&
+                    file.seek(file.size() - 2) && file.read() == 0xFF && file.read() == 0xD9;
+    file.close();
+    if (!complete) {
+        return false;
+    }
+
+    uint16_t width = 0;
+    uint16_t height = 0;
+    if (TJpgDec.getFsJpgSize(&width, &height, path, LittleFS) != JDR_OK || width == 0 || height == 0) {
+        return false;
+    }
+
+    struct CallbackRestorer {
+        ~CallbackRestorer() { TJpgDec.setCallback(tftOutput); }
+    } restoreCallback;
+    TJpgDec.setCallback([](int16_t, int16_t, uint16_t, uint16_t, uint16_t *) {
+        yield();
+        return true;
+    });
+    return TJpgDec.drawFsJpg(0, 0, path, LittleFS) == JDR_OK;
+}
+
 void displayRenderImage(const char *path) {
     if (!LittleFS.exists(path)) {
         displayShowMessage(F("Image not found"));
