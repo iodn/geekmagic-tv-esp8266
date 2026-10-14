@@ -1,0 +1,82 @@
+Professional device palettes and final review — 2026-10-14
+
+Source commits
+
+e2d7aad: correct preset swatches that did not match firmware colors.
+12ec784: selecting a preset clears its custom-color override, so it applies.
+2369f1b: add fourteen palettes using established color systems.
+ef73758: adapt generated custom-theme muted/status colors to the background.
+Each bug fix is committed separately.
+
+Palette design
+
+Ten dark and four light options, available independently for day and night:
+Aurora, Sunset, Terminal, Nord, Dracula, Mocha, Latte, Solarized Dark,
+Solarized Light, Paper, Rose, Ocean, Lavender, Graphite.
+
+Material 3 palettes use Material Color Utilities 0.4.0 with documented seeds.
+Other palettes adapt the official Nord, Dracula, Catppuccin and Solarized colors.
+Source URLs, original adjusted tones and ten role colors are recorded in
+src/device-themes.json. Selected tones are adapted for LCD contrast; these are
+adaptations, rather than claims of exact unmodified upstream colors.
+
+The build generates both firmware palettes and browser swatches from that
+catalog. Swatches reflect the actual RGB565-expanded screen values. Original
+IDs 0/1/2 remain compatible with saved settings; their colors are refined.
+Both profiles retain their custom color values when choosing a preset.
+Custom colors keep all four explicitly chosen roles. Derived muted, positive,
+negative and warning roles adapt to the background; the result is cached until
+its configuration changes, avoiding repeated floating-point work during redraws.
+
+Verification
+
+pio run: PASS. Static RAM 50,984 bytes (62.2%), flash 739,659 bytes (70.8%).
+Application binary 743,808 bytes, SHA256:
+561d9b5bc0889e144cf74cf70479632d5c529bca157076b76284c60927a6193d
+
+python3 audit/reproduce.py: PASS, 23 suites (20 Python, 3 Node).
+All preset text, muted, accent and status roles meet 4.5:1 contrast against
+background, surface, surfaceAlt and accentSoft after RGB565 quantization.
+Tests verify catalog/firmware/browser parity, compatible original IDs, preset
+selection disabling the matching custom override, independent profiles,
+custom derived colors on light/dark backgrounds, preserved explicit colors,
+and cache invalidation when colors change.
+
+Exact TFT font rendering passes for all nine layouts in all fourteen palettes
+(126 layouts), plus long/stale/empty inputs and the low-memory drawing fallback.
+assets/device-theme-gallery.png contains rendered previews, not photographs.
+
+Chromium: PASS using the generated gzipped embedded HTML. All fourteen choices
+appear in both profiles, selecting day/night presets applies correctly with
+custom overrides active, and mobile/desktop layouts at 320/375/1280 px pass.
+Existing six-tab, OTA, focus and preview/save failure recovery checks also pass.
+Dashboard screenshots were inspected at 375 px; the palette gallery was inspected.
+git diff --check: PASS.
+
+The user confirmed the previous flashed device layout feels good. Contrast
+ratios and exact glyph previews validate colors and bounds; they do not measure
+physical panel calibration or promise readability at every viewing distance.
+
+Native verification
+
+Application-only flashing under standing user authorization preserves settings.
+The previously verified private full-flash backup remains available.
+write-professional-themes.log: 743,808 bytes written; esptool hash verified.
+Private logs are stored under /home/intra/.local/state/geekmagic-backups/.
+
+The first 100-second boot is stable and settings validate. Weather and BTC
+succeed; MSFT/NVDA defer their initial requests with a low-heap guard error.
+The guard keeps the device running safely. This transient is recorded rather
+than counted as a fully successful feed batch.
+
+On a second boot of the same binary, settings validate, WiFi reconnects at
+6.430 s, and time services, mDNS and OTA start. Weather succeeds at 22.391 s;
+BTC/MSFT/NVDA HTTPS requests succeed at 25.402/27.609/29.816 s. The display buffer
+is restored at 30.619 s. Boot stability passes at 34.429 s with DRAM free
+18,320 bytes, largest block 17,336, fragmentation 6%; IRAM free/largest 18,824.
+The repeat demonstrates that the initial feed deferral is not persistent.
+
+professional-themes-second-boot.log: continuous 100-second serial capture.
+Both completed captures contain one boot and no exception, watchdog reset or
+repeated restart. These checks exercise normal network feeds, rather than
+claiming exhaustive hardware coverage for every custom palette or AP.

@@ -67,11 +67,12 @@ The drawing buffer is restored at 32.750 s. Boot stability passes at 34.356 s:
 DRAM free 18,248 bytes, largest block 17,384, fragmentation 5%. No exception,
 watchdog reset or repeated boot appears during the capture.
 
-Remaining physical assessment
+Physical assessment
 
 Native startup and pixel-accurate previews prove implementation and layout bounds,
 not readability for every person at a distance. The user was asked to assess the
 market percentage, temperature and footer from their usual viewing position.
-That feedback has not arrived yet. Metadata remains smaller than the primary
-values because the panel is physically small; no universal distance guarantee
+The user subsequently confirmed that the flashed layout feels good and requested
+a final review and more professional device palettes. Metadata remains smaller
+than the primary values because the panel is physically small; no universal distance guarantee
 or claim of physically verified flicker elimination is made.

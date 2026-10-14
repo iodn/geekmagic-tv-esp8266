@@ -35,7 +35,9 @@ Rendered previews use the firmware layout functions and the actual TFT font bitm
 Choose from 14 matched palettes for daytime and scheduled night mode: Aurora,
 Sunset, Terminal, Nord, Dracula, Mocha, Latte, Solarized Dark, Solarized Light,
 Paper, Rose, Ocean, Lavender, and Graphite. Ten are dark and four are light.
-Selecting a preset disables custom colors for that profile.
+Selecting a preset disables custom colors for that profile. Custom colors remain
+editable; automatically generated muted and status colors adapt to the chosen
+background for readability.
 
 Aurora, Sunset, Terminal, Paper, Rose, Ocean, Lavender, and Graphite use
 [Material 3 color utilities](https://github.com/material-foundation/material-color-utilities).
