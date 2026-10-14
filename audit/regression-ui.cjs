@@ -47,6 +47,33 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
     saving=vm.runInContext('resetFeedDefaults()',context);await tick();
     vm.runInContext('feedEditGeneration++; feedDirty=true',context);release({ok:true});await saving;
     assert.equal(context.feedDirty,true,'Feed reset preserves edits made while pending');
+    let appliedDisplay=0,appliedFeeds=0;
+    const elements=new Map();
+    const hydrationContext=vm.createContext({
+        authenticated:true,authCanRevealPassword:false,hydrating:false,
+        dirty:false,feedDirty:false,editGeneration:0,feedEditGeneration:0,
+        liveTimer:11,feedLiveTimer:12,window:{clearTimeout(){},setTimeout(){return 13;}},
+        setSyncState(){},updateActionButtons(){},console,formatBytes:()=>'',
+        applyAppState(){appliedDisplay++;},applyDashboardState(){appliedDisplay++;},applyFeedState(){appliedFeeds++;},
+        document:{getElementById(id){if(!elements.has(id))elements.set(id,{});return elements.get(id);}},
+        request:async()=>new Promise(resolve=>pendingLoads.push(resolve))
+    });
+    let pendingLoads=[];
+    vm.runInContext(['loadAllState','loadFeedStateOnly','scheduleLiveSync','scheduleFeedPreview'].map(extract).join('\n'),hydrationContext);
+    let loading=vm.runInContext('loadAllState()',hydrationContext);await tick();
+    vm.runInContext('scheduleLiveSync();scheduleFeedPreview()',hydrationContext);
+    assert.equal(hydrationContext.editGeneration,1,'Edits during refresh are tracked');
+    assert.equal(hydrationContext.feedEditGeneration,1);
+    pendingLoads.splice(0).forEach(resolve=>resolve({ok:true,json:async()=>({meta:{hasDraft:false}})}));
+    await loading;assert.equal(appliedDisplay,0);assert.equal(appliedFeeds,0);
+    assert.equal(hydrationContext.dirty,true);assert.equal(hydrationContext.feedDirty,true);
+    loading=vm.runInContext('loadFeedStateOnly()',hydrationContext);await tick();
+    pendingLoads.splice(0).forEach(resolve=>resolve({ok:true,json:async()=>({})}));
+    await loading;assert.equal(appliedFeeds,0,'Feed refresh preserves an existing local draft');
+    vm.runInContext('dirty=false;feedDirty=false',hydrationContext);
+    loading=vm.runInContext('loadAllState()',hydrationContext);await tick();
+    pendingLoads.splice(0).forEach(resolve=>resolve({ok:true,json:async()=>({})}));
+    await loading;assert.equal(appliedDisplay,2);assert.equal(appliedFeeds,1,'Clean controls hydrate normally');
     const calls=[];let releaseFirst;
     context.first = () => {calls.push('preview'); return new Promise(resolve => {releaseFirst=resolve;});};
     context.second = () => {calls.push('discard');};

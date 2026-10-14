@@ -2928,7 +2928,7 @@ function buildLivePayload() {
 }
 
 function scheduleFeedPreview(delay = 180) {
-    if (hydrating || !authenticated) {
+    if (!authenticated) {
         return;
     }
 
@@ -2945,7 +2945,7 @@ function scheduleFeedPreview(delay = 180) {
 }
 
 function scheduleLiveSync(delay = 180) {
-    if (hydrating || !authenticated) {
+    if (!authenticated) {
         return;
     }
 
@@ -3597,8 +3597,8 @@ async function loadFeedStateOnly() {
         return;
     }
 
-    window.clearTimeout(feedLiveTimer);
-    feedLiveTimer = 0;
+    const generation = feedEditGeneration;
+    const preserveEdits = feedDirty;
 
     const response = await request("/feeds.json");
     if (!response.ok) {
@@ -3606,8 +3606,10 @@ async function loadFeedStateOnly() {
     }
 
     const feedState = await response.json();
-    applyFeedState(feedState);
-    feedDirty = Boolean(feedState.meta?.hasDraft);
+    if (!preserveEdits && generation === feedEditGeneration) {
+        applyFeedState(feedState);
+        feedDirty = Boolean(feedState.meta?.hasDraft);
+    }
     updateActionButtons();
 }
 
@@ -3617,12 +3619,12 @@ async function loadAllState() {
         return;
     }
 
+    const generation = editGeneration;
+    const feedGeneration = feedEditGeneration;
+    const preserveEdits = dirty;
+    const preserveFeedEdits = feedDirty;
     hydrating = true;
     setSyncState("Loading", "pending");
-    window.clearTimeout(liveTimer);
-    window.clearTimeout(feedLiveTimer);
-    liveTimer = 0;
-    feedLiveTimer = 0;
 
     try {
         const [appResponse, dashboardResponse, feedsResponse, versionResponse, spaceResponse] = await Promise.all([
@@ -3643,9 +3645,15 @@ async function loadAllState() {
         const versionState = await versionResponse.json();
         const spaceState = await spaceResponse.json();
 
-        applyAppState(appState);
-        applyDashboardState(dashboardState);
-        applyFeedState(feedsState);
+        if (!preserveEdits && generation === editGeneration) {
+            applyAppState(appState);
+            applyDashboardState(dashboardState);
+            dirty = Boolean(appState.displayDraft || dashboardState.meta?.hasDraft);
+        }
+        if (!preserveFeedEdits && feedGeneration === feedEditGeneration) {
+            applyFeedState(feedsState);
+            feedDirty = Boolean(feedsState.meta?.hasDraft);
+        }
 
         const firmwareVersion = versionState.version || "Unknown";
         const storageText = `${formatBytes(spaceState.free)} free`;
@@ -3654,9 +3662,6 @@ async function loadAllState() {
         document.getElementById("storageMeta").textContent = storageText;
         document.getElementById("systemVersion").textContent = firmwareVersion;
         document.getElementById("systemStorage").textContent = `${formatBytes(spaceState.total)} / ${formatBytes(spaceState.free)} free`;
-
-        dirty = Boolean(appState.displayDraft || dashboardState.meta?.hasDraft);
-        feedDirty = Boolean(feedsState.meta?.hasDraft);
 
         if (dirty && feedDirty) {
             setSyncState("Display + feeds draft", "live");
