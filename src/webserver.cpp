@@ -279,7 +279,7 @@ bool ensureAuthenticatedRequest() {
     }
 
     clearSessionCookie();
-    sendTextResponse(401, "Unauthorized");
+    sendTextResponse(401, F("Unauthorized"));
     return false;
 }
 
@@ -296,7 +296,7 @@ void registerProtectedRoute(const char *uri, HTTPMethod method, SimpleHandler ha
 bool parseJsonBody(JsonDocument &doc, String *error = nullptr) {
     if (!server.hasArg("plain")) {
         if (error != nullptr) {
-            *error = "Missing JSON body";
+            *error = F("Missing JSON body");
         }
         return false;
     }
@@ -335,7 +335,7 @@ bool sanitizeImagePath(const String &input, String &normalizedPath, String *erro
         candidate.indexOf('\\') >= 0 ||
         !imageExtensionAllowed(candidate)) {
         if (error != nullptr) {
-            *error = "Invalid image path";
+            *error = F("Invalid image path");
         }
         return false;
     }
@@ -365,7 +365,7 @@ bool sanitizeUploadFilename(const String &input, String &safeFilename, String *e
 
     if (sanitized.length() == 0 || sanitized[0] == '.' || !imageExtensionAllowed(sanitized)) {
         if (error != nullptr) {
-            *error = "Invalid JPEG filename";
+            *error = F("Invalid JPEG filename");
         }
         return false;
     }
@@ -388,13 +388,13 @@ bool setCurrentImageSelection(const String &requestedPath, String *error = nullp
 
     if (imagePath.length() >= sizeof(currentImage)) {
         if (error != nullptr) {
-            *error = "Image path is too long";
+            *error = F("Image path is too long");
         }
         return false;
     }
     if (imagePath.length() > 0 && !LittleFS.exists(imagePath)) {
         if (error != nullptr) {
-            *error = "Image not found";
+            *error = F("Image not found");
         }
         return false;
     }
@@ -449,7 +449,7 @@ bool applyRuntimeSettingsObject(JsonObjectConst settings, bool persist, String *
 
     if (persist && (changed || displayHasDraftChanges())) {
         if (!settingsSave(appSettings)) {
-            if (error != nullptr) *error = "Failed to save settings";
+            if (error != nullptr) *error = F("Failed to save settings");
             return false;
         }
         captureSavedSettings();
@@ -495,12 +495,12 @@ bool applyDashboardPayload(JsonDocument &doc, bool persist, String *error = null
     if (persist) {
         if (!dashboardSaveAll()) {
             if (error != nullptr) {
-                *error = "Failed to save dashboard";
+                *error = F("Failed to save dashboard");
             }
             return false;
         }
         if (!settingsSave(appSettings)) {
-            if (error != nullptr) *error = "Failed to save settings";
+            if (error != nullptr) *error = F("Failed to save settings");
             return false;
         }
         captureSavedSettings();
@@ -523,7 +523,7 @@ bool applyFeedPayload(JsonDocument &doc, bool persist, String *error = nullptr) 
 
     if (persist && !feedsSaveConfig()) {
         if (error != nullptr) {
-            *error = "Failed to save feed config";
+            *error = F("Failed to save feed config");
         }
         return false;
     }
@@ -763,19 +763,19 @@ void handleAuthLogin() {
     const char *password = doc["password"] | "";
     if (username == nullptr || String(username) != authUsername()) {
         clearSessionCookie();
-        sendTextResponse(401, "Unauthorized");
+        sendTextResponse(401, F("Unauthorized"));
         return;
     }
 
     if (!authVerifyPassword(String(password))) {
         clearSessionCookie();
-        sendTextResponse(401, "Invalid password");
+        sendTextResponse(401, F("Invalid password"));
         return;
     }
 
     startAuthenticatedSession();
     attachSessionCookie(kAuthSessionMaxAgeSec);
-    sendTextResponse(200, "OK");
+    sendTextResponse(200, F("OK"));
 }
 
 void handleAuthLogout() {
@@ -783,24 +783,24 @@ void handleAuthLogout() {
         clearSessionState();
     }
     clearSessionCookie();
-    sendTextResponse(200, "OK");
+    sendTextResponse(200, F("OK"));
 }
 
 void handleAuthReveal() {
     if (!authCanRevealPassword()) {
         sendTextResponse(409,
-                         "Custom or older passwords cannot be displayed. If you forgot it, factory reset with 5 quick power cycles.");
+                         F("Custom or older passwords cannot be displayed. If you forgot it, factory reset with 5 quick power cycles."));
         return;
     }
 
     const char *password = authProvisionedPassword();
     if (password == nullptr || password[0] == '\0') {
-        sendTextResponse(409, "No revealable setup password is available.");
+        sendTextResponse(409, F("No revealable setup password is available."));
         return;
     }
 
     displayShowTemporaryMessage(String(F("Admin login\n")) + authUsername() + "\n" + password, 15000UL);
-    sendTextResponse(200, "Password shown on device for 15 seconds.");
+    sendTextResponse(200, F("Password shown on device for 15 seconds."));
 }
 
 void handleAuthPasswordChange() {
@@ -821,12 +821,12 @@ void handleAuthPasswordChange() {
     clearSessionState();
     clearSessionCookie();
     queueRestart();
-    sendTextResponse(200, "Password updated. Device restarting.");
+    sendTextResponse(200, F("Password updated. Device restarting."));
 }
 
 void handleDashboardConfigSave() {
     if (!server.hasArg("plain")) {
-        sendTextResponse(400, "Missing JSON body");
+        sendTextResponse(400, F("Missing JSON body"));
         return;
     }
 
@@ -840,7 +840,7 @@ void handleDashboardConfigSave() {
     if (appSettings.theme != currentTheme || displayHasDraftChanges()) {
         appSettings.theme = currentTheme;
         if (!settingsSave(appSettings)) {
-            sendTextResponse(500, "Failed to save settings");
+            sendTextResponse(500, F("Failed to save settings"));
             return;
         }
         captureSavedSettings();
@@ -848,12 +848,12 @@ void handleDashboardConfigSave() {
     applyEffectiveBrightness(false);
     displayState.currentPage = dashboardFirstEnabledPage();
     displayUpdate();
-    sendTextResponse(200, "OK");
+    sendTextResponse(200, F("OK"));
 }
 
 void handleDashboardDataSave() {
     if (!server.hasArg("plain")) {
-        sendTextResponse(400, "Missing JSON body");
+        sendTextResponse(400, F("Missing JSON body"));
         return;
     }
 
@@ -864,13 +864,13 @@ void handleDashboardDataSave() {
     }
 
     displayUpdate();
-    sendTextResponse(200, "OK");
+    sendTextResponse(200, F("OK"));
 }
 
 void handleDashboardReset() {
     dashboardResetToDefaults();
     if (!dashboardSaveAll()) {
-        sendTextResponse(500, "Failed to reset dashboard");
+        sendTextResponse(500, F("Failed to reset dashboard"));
         return;
     }
 
@@ -878,7 +878,7 @@ void handleDashboardReset() {
     if (appSettings.theme != currentTheme || displayHasDraftChanges()) {
         appSettings.theme = currentTheme;
         if (!settingsSave(appSettings)) {
-            sendTextResponse(500, "Failed to save settings");
+            sendTextResponse(500, F("Failed to save settings"));
             return;
         }
         captureSavedSettings();
@@ -886,7 +886,7 @@ void handleDashboardReset() {
     applyEffectiveBrightness(false);
     displayState.currentPage = dashboardFirstEnabledPage();
     displayUpdate();
-    sendTextResponse(200, "OK");
+    sendTextResponse(200, F("OK"));
 }
 
 void handleDashboardLive() {
@@ -903,7 +903,7 @@ void handleDashboardLive() {
     }
 
     displayUpdate();
-    sendTextResponse(200, "OK");
+    sendTextResponse(200, F("OK"));
 }
 
 void handleDashboardSave() {
@@ -922,11 +922,11 @@ void handleDashboardSave() {
     } else {
         appSettings.theme = dashboardConfig.theme;
         if (!dashboardSaveAll()) {
-            sendTextResponse(500, "Failed to save dashboard");
+            sendTextResponse(500, F("Failed to save dashboard"));
             return;
         }
         if (!settingsSave(appSettings)) {
-            sendTextResponse(500, "Failed to save settings");
+            sendTextResponse(500, F("Failed to save settings"));
             return;
         }
         captureSavedSettings();
@@ -934,7 +934,7 @@ void handleDashboardSave() {
     }
 
     displayUpdate();
-    sendTextResponse(200, "OK");
+    sendTextResponse(200, F("OK"));
 }
 
 void handleDashboardDiscard() {
@@ -946,12 +946,12 @@ void handleDashboardDiscard() {
         displayState.currentPage = dashboardFirstEnabledPage();
     }
     displayUpdate();
-    sendTextResponse(200, "OK");
+    sendTextResponse(200, F("OK"));
 }
 
 void handleFeedsLive() {
     if (feedsBusy() || webserverHasPendingNetworkAction()) {
-        sendTextResponse(409, "Another network request is already running");
+        sendTextResponse(409, F("Another network request is already running"));
         return;
     }
     JsonDocument doc;
@@ -967,12 +967,12 @@ void handleFeedsLive() {
     }
 
     displayUpdate();
-    sendTextResponse(200, "OK");
+    sendTextResponse(200, F("OK"));
 }
 
 void handleFeedsSave() {
     if (feedsBusy() || webserverHasPendingNetworkAction()) {
-        sendTextResponse(409, "Another network request is already running");
+        sendTextResponse(409, F("Another network request is already running"));
         return;
     }
     String error;
@@ -988,41 +988,41 @@ void handleFeedsSave() {
             return;
         }
     } else if (!feedsSaveConfig()) {
-        sendTextResponse(500, "Failed to save feed config");
+        sendTextResponse(500, F("Failed to save feed config"));
         return;
     }
 
-    sendTextResponse(200, "OK");
+    sendTextResponse(200, F("OK"));
 }
 
 void handleFeedsDiscard() {
     if (feedsBusy() || webserverHasPendingNetworkAction()) {
-        sendTextResponse(409, "Another network request is already running");
+        sendTextResponse(409, F("Another network request is already running"));
         return;
     }
     feedsDiscardDraftChanges();
     displayUpdate();
-    sendTextResponse(200, "OK");
+    sendTextResponse(200, F("OK"));
 }
 
 void handleFeedsReset() {
     if (feedsBusy() || webserverHasPendingNetworkAction()) {
-        sendTextResponse(409, "Another network request is already running");
+        sendTextResponse(409, F("Another network request is already running"));
         return;
     }
     feedsResetToDefaults();
     if (!feedsSaveConfig()) {
-        sendTextResponse(500, "Failed to reset feed config");
+        sendTextResponse(500, F("Failed to reset feed config"));
         return;
     }
 
     displayUpdate();
-    sendTextResponse(200, "OK");
+    sendTextResponse(200, F("OK"));
 }
 
 void handleFeedsSync() {
     if (feedsBusy() || webserverHasPendingNetworkAction()) {
-        sendTextResponse(409, "Another network request is already running");
+        sendTextResponse(409, F("Another network request is already running"));
         return;
     }
     String scope = server.hasArg("scope") ? server.arg("scope") : "all";
@@ -1048,7 +1048,7 @@ void handleFeedSearch() {
     String error;
     if (server.hasArg("query")) {
         if (feedsBusy() || webserverHasPendingNetworkAction()) {
-            sendTextResponse(409, "Another network request is already running");
+            sendTextResponse(409, F("Another network request is already running"));
             return;
         }
         if (!feedsQueueWeatherSearch(server.arg("query"), &error)) {
@@ -1179,7 +1179,7 @@ void handleDelete() {
     }
 
     if (!LittleFS.remove(normalizedPath)) {
-        sendTextResponse(404, "Not found");
+        sendTextResponse(404, F("Not found"));
         return;
     }
 
@@ -1187,7 +1187,7 @@ void handleDelete() {
         clearCurrentImageSelection();
     }
 
-    sendTextResponse(200, "Deleted");
+    sendTextResponse(200, F("Deleted"));
 }
 
 void handleImageShow() {
@@ -1204,24 +1204,24 @@ void handleImageShow() {
     }
 
     displayUpdate();
-    sendTextResponse(200, "OK");
+    sendTextResponse(200, F("OK"));
 }
 
 void handleApiUpdate() {
     if (!server.hasArg("plain")) {
-        sendTextResponse(400, "No JSON body");
+        sendTextResponse(400, F("No JSON body"));
         return;
     }
 
     JsonDocument doc;
     DeserializationError error = deserializeJson(doc, server.arg("plain"));
     if (error) {
-        sendTextResponse(400, "Invalid JSON");
+        sendTextResponse(400, F("Invalid JSON"));
         return;
     }
 
     if (!doc["line1"].isNull() && !doc["line1"].is<const char*>()) {
-        sendTextResponse(400, "line1 must be a string");
+        sendTextResponse(400, F("line1 must be a string"));
         return;
     }
     if (!doc["line1"].isNull()) {
@@ -1233,7 +1233,7 @@ void handleApiUpdate() {
 
     displayState.showImage = false;
     displayUpdate();
-    sendTextResponse(200, "OK");
+    sendTextResponse(200, F("OK"));
 }
 
 void handleTestCard() {
@@ -1242,22 +1242,22 @@ void handleTestCard() {
     displayState.line2[0] = '\0';
     displayState.currentPage = DASHBOARD_PAGE_CLOCK;
     displayUpdate();
-    sendTextResponse(200, "OK");
+    sendTextResponse(200, F("OK"));
 }
 
 void handleReconfigureWiFi() {
     if (webserverHasPendingNetworkAction()) {
-        sendTextResponse(409, "Another network task is already running");
+        sendTextResponse(409, F("Another network task is already running"));
         return;
     }
 
     wifiReconfigurePending = true;
-    sendTextResponse(202, "WiFi credentials will be cleared. Device restarting to AP mode.");
+    sendTextResponse(202, F("WiFi credentials will be cleared. Device restarting to AP mode."));
 }
 
 void handleFactoryReset() {
     factoryResetPending = true;
-    sendTextResponse(202, "Factory reset requested. Device will restart shortly.");
+    sendTextResponse(202, F("Factory reset requested. Device will restart shortly."));
 }
 
 void handleOTAForm() {
@@ -1275,7 +1275,7 @@ void handleOTAUpload() {
             otaUploadError = "Another network request is running";
             return;
         }
-        displayShowMessage("OTA Update...");
+        displayShowMessage(F("OTA Update..."));
         uint32_t maxSketchSpace = (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000;
         if (!Update.begin(maxSketchSpace)) {
             otaUploadError = "Firmware update could not start";
@@ -1293,10 +1293,10 @@ void handleOTAUpload() {
     } else if (upload.status == UPLOAD_FILE_END && otaUploadError.isEmpty()) {
         if (Update.end(true)) {
             otaUploadComplete = true;
-            displayShowMessage("OTA complete");
+            displayShowMessage(F("OTA complete"));
         } else {
             Update.printError(Serial);
-            displayShowMessage("OTA failed");
+            displayShowMessage(F("OTA failed"));
         }
     }
 }
@@ -1322,19 +1322,19 @@ void handleLog() {
 void handleWiFiScan() {
     if (server.hasArg("start") && server.arg("start") == "1") {
         if (webserverHasPendingNetworkAction() || feedsBusy()) {
-            sendTextResponse(409, "Another network task is running");
+            sendTextResponse(409, F("Another network task is running"));
             return;
         }
         WiFi.scanDelete();
         int result = WiFi.scanNetworks(true, true);
         if (result == WIFI_SCAN_FAILED) {
-            sendTextResponse(502, "WiFi scan could not start");
+            sendTextResponse(502, F("WiFi scan could not start"));
             return;
         }
         wifiScanStarted = true;
     }
     if (!wifiScanStarted) {
-        sendTextResponse(409, "No scan queued");
+        sendTextResponse(409, F("No scan queued"));
         return;
     }
     int networkCount = WiFi.scanComplete();
@@ -1344,7 +1344,7 @@ void handleWiFiScan() {
     }
     if (networkCount < 0) {
         wifiScanStarted = false;
-        sendTextResponse(502, "WiFi scan failed");
+        sendTextResponse(502, F("WiFi scan failed"));
         return;
     }
     JsonDocument doc;
@@ -1357,7 +1357,7 @@ void handleWiFiScan() {
     }
     String json;
     if (doc.overflowed()) {
-        sendTextResponse(503, "Scan results exceed available memory");
+        sendTextResponse(503, F("Scan results exceed available memory"));
     } else {
         serializeJson(doc, json);
         sendJsonResponse(200, json);
@@ -1368,7 +1368,7 @@ void handleWiFiScan() {
 
 void handleWiFiConnect() {
     if (webserverHasPendingNetworkAction()) {
-        sendTextResponse(409, "Another network task is already running");
+        sendTextResponse(409, F("Another network task is already running"));
         return;
     }
 
@@ -1383,14 +1383,14 @@ void handleWiFiConnect() {
     const char *password = doc["password"] | "";
     if (ssid == nullptr || ssid[0] == '\0' || strlen(ssid) >= sizeof(wifiConnectTask.ssid) ||
         strlen(password) >= sizeof(wifiConnectTask.password)) {
-        sendTextResponse(400, "Missing SSID");
+        sendTextResponse(400, F("Missing SSID"));
         return;
     }
 
     copyString(wifiConnectTask.ssid, sizeof(wifiConnectTask.ssid), ssid);
     copyString(wifiConnectTask.password, sizeof(wifiConnectTask.password), password);
     wifiConnectTask.queued = true;
-    sendTextResponse(202, "Connection started. Device will restart if successful.");
+    sendTextResponse(202, F("Connection started. Device will restart if successful."));
 }
 
 void handleRoot() {
@@ -1500,7 +1500,7 @@ void webserverInit() {
             server.sendHeader("Location", "http://" + WiFi.softAPIP().toString() + "/");
             server.send(302, "text/plain", "Open setup dashboard");
         } else {
-            sendTextResponse(404, "Not found");
+            sendTextResponse(404, F("Not found"));
         }
     });
 

@@ -911,7 +911,7 @@ bool dashboardApplyConfigJson(const String &json, String *error) {
     applyConfigObject(doc.as<JsonObjectConst>());
     if (!dashboardSaveConfig()) {
         if (error != nullptr) {
-            *error = "Failed to write config";
+            *error = F("Failed to write config");
         }
         return false;
     }
@@ -932,7 +932,7 @@ bool dashboardApplyDataJson(const String &json, String *error) {
     applyDataObject(doc.as<JsonObjectConst>());
     if (!dashboardSaveData()) {
         if (error != nullptr) {
-            *error = "Failed to write data";
+            *error = F("Failed to write data");
         }
         return false;
     }

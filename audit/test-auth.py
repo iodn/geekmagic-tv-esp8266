@@ -16,6 +16,7 @@ with tempfile.TemporaryDirectory() as folder:
     tmp = Path(folder)
     (tmp / "Arduino.h").write_text(r'''
 #pragma once
+#define F(x) x
 #include <cstdint>
 #include <cstdio>
 #include <cstring>

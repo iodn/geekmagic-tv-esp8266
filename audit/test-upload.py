@@ -25,6 +25,7 @@ def function(name):
 
 code = r'''
 #include <cassert>
+#define F(x) x
 #include <cstdio>
 #include <cstdint>
 #include <cstring>

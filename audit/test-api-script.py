@@ -124,6 +124,7 @@ def exercise_api_handler():
     code = r'''
 #include <ArduinoJson.h>
 #include <cassert>
+#define F(x) x
 #include <cstring>
 #include <string>
 struct {std::string body;bool hasBody=true;bool hasArg(const char*){return hasBody;}std::string arg(const char*){return body;}} server;

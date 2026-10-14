@@ -234,14 +234,14 @@ void authInit() {
 bool authValidatePasswordPolicy(const String &password, String *error) {
     if (password.length() < AUTH_MIN_PASSWORD_LENGTH || password.length() > AUTH_MAX_PASSWORD_LENGTH) {
         if (error != nullptr) {
-            *error = "Use 8 to 32 characters";
+            *error = F("Use 8 to 32 characters");
         }
         return false;
     }
 
     if (!passwordTextValid(password.c_str())) {
         if (error != nullptr) {
-            *error = "Use printable ASCII without spaces";
+            *error = F("Use printable ASCII without spaces");
         }
         return false;
     }
@@ -264,7 +264,7 @@ bool authVerifyPassword(const String &password) {
 bool authUpdatePassword(const String &currentPassword, const String &newPassword, String *error) {
     if (!authVerifyPassword(currentPassword)) {
         if (error != nullptr) {
-            *error = "Current password is incorrect";
+            *error = F("Current password is incorrect");
         }
         return false;
     }
@@ -279,7 +279,7 @@ bool authUpdatePassword(const String &currentPassword, const String &newPassword
     candidate.provisionedPassword[0] = '\0';
     if (!writeAuthConfig(candidate)) {
         if (error != nullptr) {
-            *error = "Failed to save password";
+            *error = F("Failed to save password");
         }
         return false;
     }

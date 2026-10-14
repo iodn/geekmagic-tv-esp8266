@@ -12,7 +12,7 @@ def extract(name):
     return source[match.start():end]
 with tempfile.TemporaryDirectory() as folder:
     d=Path(folder)
-    (d/'Arduino.h').write_text('#pragma once\n#include <string>\n#include <cstdint>\nusing String=std::string;\n')
+    (d/'Arduino.h').write_text('#pragma once\n#define F(x) x\n#include <string>\n#include <cstdint>\nusing String=std::string;\n')
     code=r'''
 #include <ArduinoJson.h>
 #include "dashboard.h"

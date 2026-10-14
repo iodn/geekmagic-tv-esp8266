@@ -941,7 +941,7 @@ bool httpGetJson(const String &url,
                  JsonDocument *filter = nullptr,
                  const HttpJsonRequestOptions *options = nullptr) {
     if (feedJobsCancelled) {
-        if (error) *error = "Feed job cancelled";
+        if (error) *error = F("Feed job cancelled");
         return false;
     }
     struct RequestGuard {
@@ -981,7 +981,7 @@ bool httpGetJson(const String &url,
         }
 
         if (http.getSize() > 131072) {
-            if (error) *error = "Response too large";
+            if (error) *error = F("Response too large");
             http.end();
             return false;
         }
@@ -1006,7 +1006,7 @@ bool httpGetJson(const String &url,
         }
 
         if (activeRequestExpired) {
-            if (error) *error = "Request deadline exceeded";
+            if (error) *error = F("Request deadline exceeded");
             return false;
         }
         return true;
@@ -1022,7 +1022,7 @@ bool httpGetJson(const String &url,
         ActiveClientGuard activeGuard(&client);
         if (!http.begin(client, url)) {
             if (error != nullptr) {
-                *error = "HTTP begin failed";
+                *error = F("HTTP begin failed");
             }
             return false;
         }
@@ -1032,7 +1032,7 @@ bool httpGetJson(const String &url,
 
     if (!url.startsWith("https://")) {
         if (error != nullptr) {
-            *error = "Unsupported URL scheme";
+            *error = F("Unsupported URL scheme");
         }
         return false;
     }
@@ -1048,26 +1048,26 @@ bool httpGetJson(const String &url,
     } displayHeapGuard;
 
     if (ESP.getFreeHeap() < kHttpsMinFreeHeapBytes) {
-        if (error) *error = "Low heap, retrying later";
+        if (error) *error = F("Low heap, retrying later");
         return false;
     }
     std::unique_ptr<FeedTlsClient> client(new (std::nothrow) FeedTlsClient());
     if (!client) {
-        if (error) *error = "TLS client allocation failed";
+        if (error) *error = F("TLS client allocation failed");
         return false;
     }
     if (options != nullptr &&
         options->tlsMode == HOME_ASSISTANT_TLS_FINGERPRINT) {
         if (options->fingerprint == nullptr || options->fingerprint[0] == '\0') {
             if (error != nullptr) {
-                *error = "Fingerprint missing";
+                *error = F("Fingerprint missing");
             }
             return false;
         }
 
         if (!client->setFingerprint(options->fingerprint)) {
             if (error != nullptr) {
-                *error = "Fingerprint invalid";
+                *error = F("Fingerprint invalid");
             }
             return false;
         }
@@ -1079,7 +1079,7 @@ bool httpGetJson(const String &url,
     activeTlsClient = client.get();
     if (!http.begin(*client, url)) {
         if (error != nullptr) {
-            *error = "HTTP begin failed";
+            *error = F("HTTP begin failed");
         }
         return false;
     }
@@ -1093,7 +1093,7 @@ bool fetchWeatherSearchJson(const String &query, JsonDocument &providerDoc, Stri
 
     if (trimmedQuery.length() < 2) {
         if (error != nullptr) {
-            *error = "Enter at least 2 characters";
+            *error = F("Enter at least 2 characters");
         }
         return false;
     }
@@ -1118,7 +1118,7 @@ bool resolveWeatherLocationFromQuery(String *error) {
     JsonArrayConst providerResults = providerDoc["results"].as<JsonArrayConst>();
     if (providerResults.isNull() || providerResults.size() == 0) {
         if (error != nullptr) {
-            *error = "City not found";
+            *error = F("City not found");
         }
         return false;
     }
@@ -1126,7 +1126,7 @@ bool resolveWeatherLocationFromQuery(String *error) {
     JsonObjectConst item = providerResults[0].as<JsonObjectConst>();
     if (item.isNull() || item["latitude"].isNull() || item["longitude"].isNull()) {
         if (error != nullptr) {
-            *error = "Location payload incomplete";
+            *error = F("Location payload incomplete");
         }
         return false;
     }
@@ -1194,7 +1194,7 @@ bool resolveCoinGeckoAsset(const String &query,
     String normalizedQuery = normalizeCoinGeckoLookupValue(query);
     if (normalizedQuery.length() == 0) {
         if (error != nullptr) {
-            *error = "CoinGecko symbol missing";
+            *error = F("CoinGecko symbol missing");
         }
         return false;
     }
@@ -1214,7 +1214,7 @@ bool resolveCoinGeckoAsset(const String &query,
     JsonArrayConst coins = doc["coins"].as<JsonArrayConst>();
     if (coins.isNull() || coins.size() == 0) {
         if (error != nullptr) {
-            *error = "CoinGecko returned no match";
+            *error = F("CoinGecko returned no match");
         }
         return false;
     }
@@ -1242,7 +1242,7 @@ bool resolveCoinGeckoAsset(const String &query,
 
     if (resolvedId.length() == 0) {
         if (error != nullptr) {
-            *error = "CoinGecko returned no match";
+            *error = F("CoinGecko returned no match");
         }
         return false;
     }
@@ -1253,14 +1253,14 @@ bool resolveCoinGeckoAsset(const String &query,
 bool syncWeather(String *error) {
     if (WiFi.status() != WL_CONNECTED) {
         if (error != nullptr) {
-            *error = "WiFi disconnected";
+            *error = F("WiFi disconnected");
         }
         return false;
     }
 
     if (feedConfig.weather.source != WEATHER_FEED_OPEN_METEO || !feedsWeatherConfigured()) {
         if (error != nullptr) {
-            *error = "Weather feed not configured";
+            *error = F("Weather feed not configured");
         }
         return false;
     }
@@ -1470,7 +1470,7 @@ String normalizeHomeAssistantStateForDisplay(const String &rawState, bool &numer
 bool syncHomeAssistantSlot(uint8_t index, String *error) {
     if (index >= HOME_ASSISTANT_SLOT_COUNT) {
         if (error != nullptr) {
-            *error = "Home slot out of range";
+            *error = F("Home slot out of range");
         }
         return false;
     }
@@ -1478,7 +1478,7 @@ bool syncHomeAssistantSlot(uint8_t index, String *error) {
     const HomeAssistantSlotConfig &slot = feedConfig.homeAssistant.slots[index];
     if (!homeAssistantSlotConfigured(slot)) {
         if (error != nullptr) {
-            *error = "Home slot not configured";
+            *error = F("Home slot not configured");
         }
         return false;
     }
@@ -1506,7 +1506,7 @@ bool syncHomeAssistantSlot(uint8_t index, String *error) {
     String rawState = trimStringCopy(doc["state"] | "");
     if (entityId.length() == 0 || !doc["state"].is<const char*>()) {
         if (error != nullptr) {
-            *error = "Home Assistant payload incomplete";
+            *error = F("Home Assistant payload incomplete");
         }
         return false;
     }
@@ -1533,14 +1533,14 @@ bool syncHomeAssistantSlot(uint8_t index, String *error) {
 bool syncHomeAssistant(String *error) {
     if (WiFi.status() != WL_CONNECTED) {
         if (error != nullptr) {
-            *error = "WiFi disconnected";
+            *error = F("WiFi disconnected");
         }
         return false;
     }
 
     if (!feedsHomeAssistantConfigured()) {
         if (error != nullptr) {
-            *error = "Home Assistant not configured";
+            *error = F("Home Assistant not configured");
         }
         return false;
     }
@@ -1585,7 +1585,7 @@ bool syncHomeAssistant(String *error) {
 
     if (!anyConfigured) {
         if (error != nullptr) {
-            *error = "No Home Assistant slots configured";
+            *error = F("No Home Assistant slots configured");
         }
         copyString(runtime.lastError, sizeof(runtime.lastError), "No slots configured");
         return false;
@@ -1610,7 +1610,7 @@ bool syncHomeAssistant(String *error) {
 bool syncFinnhubMarket(uint8_t index, String *error) {
     if (feedConfig.finnhubApiKey[0] == '\0') {
         if (error != nullptr) {
-            *error = "Finnhub API key missing";
+            *error = F("Finnhub API key missing");
         }
         return false;
     }
@@ -1631,7 +1631,7 @@ bool syncFinnhubMarket(uint8_t index, String *error) {
 
     if (doc["c"].isNull()) {
         if (error != nullptr) {
-            *error = "Finnhub payload incomplete";
+            *error = F("Finnhub payload incomplete");
         }
         return false;
     }
@@ -1658,7 +1658,7 @@ bool syncCoinGeckoMarket(uint8_t index, String *error) {
     String marketId = normalizeCoinGeckoLookupValue(feedConfig.markets[index].symbol);
     if (marketId.length() == 0) {
         if (error != nullptr) {
-            *error = "CoinGecko symbol missing";
+            *error = F("CoinGecko symbol missing");
         }
         return false;
     }
@@ -1692,7 +1692,7 @@ bool syncCoinGeckoMarket(uint8_t index, String *error) {
         markets = doc.as<JsonArrayConst>();
         if (markets.isNull() || markets.size() == 0) {
             if (error != nullptr) {
-                *error = "CoinGecko returned no match";
+                *error = F("CoinGecko returned no match");
             }
             return false;
         }
@@ -1707,7 +1707,7 @@ bool syncCoinGeckoMarket(uint8_t index, String *error) {
     JsonObjectConst source = markets[0].as<JsonObjectConst>();
     if (source.isNull() || source["current_price"].isNull()) {
         if (error != nullptr) {
-            *error = "CoinGecko payload incomplete";
+            *error = F("CoinGecko payload incomplete");
         }
         return false;
     }
@@ -1733,21 +1733,21 @@ bool syncCoinGeckoMarket(uint8_t index, String *error) {
 bool syncMarket(uint8_t index, String *error) {
     if (index >= DASHBOARD_MARKET_COUNT) {
         if (error != nullptr) {
-            *error = "Market slot out of range";
+            *error = F("Market slot out of range");
         }
         return false;
     }
 
     if (WiFi.status() != WL_CONNECTED) {
         if (error != nullptr) {
-            *error = "WiFi disconnected";
+            *error = F("WiFi disconnected");
         }
         return false;
     }
 
     if (!feedsMarketConfigured(index)) {
         if (error != nullptr) {
-            *error = "Market feed not configured";
+            *error = F("Market feed not configured");
         }
         return false;
     }
@@ -2066,7 +2066,7 @@ bool feedsSaveConfig() {
 
 bool feedsPreviewConfigJson(const String &json, String *error) {
     if (feedsBusy()) {
-        if (error) *error = "Feed job already running";
+        if (error) *error = F("Feed job already running");
         return false;
     }
     JsonDocument doc;
@@ -2108,7 +2108,7 @@ bool feedsApplyConfigJson(const String &json, String *error) {
 
     if (!feedsSaveConfig()) {
         if (error != nullptr) {
-            *error = "Failed to write feed config";
+            *error = F("Failed to write feed config");
         }
         return false;
     }
@@ -2178,13 +2178,13 @@ void feedsCancelJobs() {
 
 bool feedsSyncNow(const char *scope, String *error) {
     if (feedsBusy()) {
-        if (error) *error = "Feed job already running";
+        if (error) *error = F("Feed job already running");
         return false;
     }
     String value = scope ? scope : "all";
     value.toLowerCase();
     if (value != "all" && value != "weather" && value != "markets" && value != "home" && value != "home-assistant") {
-        if (error) *error = "Invalid feed scope";
+        if (error) *error = F("Invalid feed scope");
         return false;
     }
     uint16_t jobs = 0;
@@ -2196,7 +2196,7 @@ bool feedsSyncNow(const char *scope, String *error) {
     }
     if ((value == "all" || value == "home" || value == "home-assistant") && feedsHomeAssistantConfigured()) jobs |= kHomeAssistantJob;
     if (!jobs) {
-        if (error) *error = "No live feeds configured";
+        if (error) *error = F("No live feeds configured");
         return false;
     }
     feedJobsCancelled = false;
