@@ -111,6 +111,34 @@ All prior layout, theme, dialog and OTA checks still pass.
 Latest firmware binary SHA256:
 6c20078e9c353ba9ee5bf7ad6bdecc369d78f978c699b70f9e0feca06870e027
 
+Image-render follow-up after a29e49b
+
+b4c3368: Rendering reports success explicitly. Missing, unreadable or undecodable
+          images enter an error cache and retry at a five-second interval instead
+          of caching failure as success or repainting the error every second.
+          Path changes and explicit image invalidation bypass the retry interval.
+a29e49b: Small images clear only their uncovered black margins. Large images use
+          the JPEG decoder's supported scale factors up to 1/8. Off-screen blocks
+          are clipped while yielding, instead of ending a valid decode as an
+          error. Decoder scale returns to 1 after every draw, including failures.
+
+pio run: PASS, static RAM 50,752 bytes (62.0%), flash 728,859 bytes (69.8%).
+python3 audit/reproduce.py: PASS, now 16 suites. Image-render fault checks execute
+actual renderer/cache functions for missing files, open failures, decoder/header
+failures, retry timing, recovery, invalidation, path changes and millis wrap.
+Bounds tests check scaling, uncovered margins and yielding off-screen callbacks.
+The real Tiny JPEG decoder also executes the actual renderer against generated
+32x24 and 320x256 baseline JPEGs: output bounds are 32x24 and 160x128, respectively,
+with black margins and restored scale. Chromium checks continue to pass.
+
+Latest firmware binary SHA256:
+fe0893f544b8228d5fb848ec8ea40c0e8be5cbf282768ef6a39e874dc8dc8d31
+
+The software changes and available host/browser checks are committed. No process
+is still running. Device access remains unavailable across three consecutive goal
+turns, so actual screen and radio verification requires an external-state change.
+These checks remain required; they have not been replaced by host mocks.
+
 Remaining verification and scope
 
 An actual TV is needed to confirm visible flicker, clock readability, sustained
@@ -119,5 +147,5 @@ requests, and mDNS/OTA behavior at the adjusted memory gates. Low-heap fallback
 still draws directly to the screen; page changes still redraw full pages. This
 work does not claim that every possible source of physical flicker is removed.
 No serial TV connection or supplied device address was available during this pass.
-Hardware access was requested; the overall improvement goal remains active until
-its remaining device checks can be addressed. No firmware flash was performed.
+Hardware access was requested; the overall improvement goal remains unfinished
+while its remaining device checks cannot be run. No firmware flash was performed.
