@@ -1193,6 +1193,11 @@ void hashHomeAssistantData(uint32_t &hash) {
         }
 
         hashValue(hash, slot->numeric);
+        hashValue(hash, slot->stale);
+        hashCString(hash, slot->lastError);
+        if (slot->stale && slot->lastSuccessMs != 0) {
+            hashValue(hash, (millis() - slot->lastSuccessMs) / 60000UL);
+        }
         hashCString(hash, slot->label);
         hashCString(hash, slot->state);
         hashCString(hash, slot->unit);
@@ -1772,6 +1777,12 @@ void drawHomeAssistantCard(int x,
     tft.drawString(stateText, x + (width / 2), stateY, valueFont);
 
     String footer = unit;
+    if (slot != nullptr && slot->stale) {
+        footer = slot->hasData ? "Stale" : "Error";
+        if (slot->lastSuccessMs != 0) {
+            footer += " " + String((millis() - slot->lastSuccessMs) / 60000UL) + "m";
+        }
+    }
     if (footer.length() > 0) {
         drawAdaptiveText(footer, x + (width / 2), unitY, width - 22, TC_DATUM,
                          unitFonts, sizeof(unitFonts) / sizeof(unitFonts[0]), theme.muted, fillColor);

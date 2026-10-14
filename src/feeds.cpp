@@ -755,6 +755,7 @@ void fillHomeAssistantSlotDataJson(JsonObject root, const HomeAssistantSlotData 
     root["enabled"] = slot.enabled;
     root["hasData"] = slot.hasData;
     root["numeric"] = slot.numeric;
+    root["stale"] = slot.stale;
     root["lastError"] = slot.lastError;
     root["lastAttemptAgeSec"] = slot.lastAttemptMs ? static_cast<long>((millis() - slot.lastAttemptMs) / 1000UL) : -1;
     root["lastSuccessAgeSec"] = slot.lastSuccessMs ? static_cast<long>((millis() - slot.lastSuccessMs) / 1000UL) : -1;
@@ -1619,6 +1620,7 @@ bool syncHomeAssistant(String *error) {
         runtime.slots[index].lastAttemptMs = millis();
         bool success = syncHomeAssistantSlot(index, &slotError);
         if (!success) {
+            runtime.slots[index].stale = true;
             copyString(runtime.slots[index].lastError, sizeof(runtime.slots[index].lastError), slotError.c_str());
         }
         anySuccess = anySuccess || success;
@@ -2267,6 +2269,10 @@ bool feedsSearchWeatherLocations(const String &query, String &json, String *erro
 }
 
 void feedsLoop() {
+    uint32_t staleAfterMs = static_cast<uint32_t>(feedConfig.homeAssistant.refreshMinutes) * 120000UL;
+    for (auto &slot : feedRuntime.homeAssistant.slots) {
+        if (slot.hasData && (slot.lastError[0] || millis() - slot.lastSuccessMs > staleAfterMs)) slot.stale = true;
+    }
     if (WiFi.status() != WL_CONNECTED) {
         return;
     }
