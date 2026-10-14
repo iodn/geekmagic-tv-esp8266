@@ -126,7 +126,8 @@ enum DisplayRenderMode : uint8_t {
     DISPLAY_MODE_DASHBOARD = 0,
     DISPLAY_MODE_TEMP_MESSAGE,
     DISPLAY_MODE_AP,
-    DISPLAY_MODE_IMAGE
+    DISPLAY_MODE_IMAGE,
+    DISPLAY_MODE_IMAGE_ERROR
 };
 
 struct RenderCache {
@@ -140,6 +141,7 @@ struct RenderCache {
 };
 
 RenderCache renderCache = {false, DISPLAY_MODE_DASHBOARD, 0, 0, 0, 0, {0}};
+uint32_t lastImageAttemptMs = 0;
 
 struct ClockMetaCache {
     bool valid;
@@ -2356,22 +2358,22 @@ void displayUpdate() {
 
     if (displayState.showImage && displayState.imagePath[0] != '\0') {
         if (renderCache.valid &&
-            renderCache.mode == DISPLAY_MODE_IMAGE &&
-            strcmp(renderCache.imagePath, displayState.imagePath) == 0) {
+            strcmp(renderCache.imagePath, displayState.imagePath) == 0 &&
+            (renderCache.mode == DISPLAY_MODE_IMAGE ||
+             (renderCache.mode == DISPLAY_MODE_IMAGE_ERROR && millis() - lastImageAttemptMs < 5000UL))) {
             return;
         }
 
-        displayRenderImage(displayState.imagePath);
-        if (LittleFS.exists(displayState.imagePath)) {
-            renderCache.valid = true;
-            renderCache.mode = DISPLAY_MODE_IMAGE;
-            renderCache.page = 0;
-            renderCache.theme = activeThemeIdValue();
-            renderCache.staticHash = 0;
-            renderCache.dynamicHash = 0;
-            strncpy(renderCache.imagePath, displayState.imagePath, sizeof(renderCache.imagePath) - 1);
-            renderCache.imagePath[sizeof(renderCache.imagePath) - 1] = '\0';
-        }
+        lastImageAttemptMs = millis();
+        bool rendered = displayRenderImage(displayState.imagePath);
+        renderCache.valid = true;
+        renderCache.mode = rendered ? DISPLAY_MODE_IMAGE : DISPLAY_MODE_IMAGE_ERROR;
+        renderCache.page = 0;
+        renderCache.theme = activeThemeIdValue();
+        renderCache.staticHash = 0;
+        renderCache.dynamicHash = 0;
+        strncpy(renderCache.imagePath, displayState.imagePath, sizeof(renderCache.imagePath) - 1);
+        renderCache.imagePath[sizeof(renderCache.imagePath) - 1] = '\0';
         return;
     }
 
@@ -2556,16 +2558,16 @@ bool displayValidateImage(const char *path) {
     return TJpgDec.drawFsJpg(0, 0, path, LittleFS) == JDR_OK;
 }
 
-void displayRenderImage(const char *path) {
+bool displayRenderImage(const char *path) {
     if (!LittleFS.exists(path)) {
         displayShowMessage(F("Image not found"));
-        return;
+        return false;
     }
 
     File jpgFile = LittleFS.open(path, "r");
     if (!jpgFile) {
         displayShowMessage(String(F("Failed to open\n")) + path);
-        return;
+        return false;
     }
 
     tft.startWrite();
@@ -2575,7 +2577,9 @@ void displayRenderImage(const char *path) {
 
     if (result != JDR_OK) {
         displayShowMessage(String(F("JPEG error\n")) + String(result));
+        return false;
     }
+    return true;
 }
 
 void displayShowMessage(const String &msg) {

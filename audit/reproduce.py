@@ -13,6 +13,7 @@ for name in (
     'test-settings.py',
     'test-web-assets.py',
     'test-display.py',
+    'test-image-render.py',
     'test-wrapped-display.py',
     'test-display-heap.py',
     'test-upload.py',
