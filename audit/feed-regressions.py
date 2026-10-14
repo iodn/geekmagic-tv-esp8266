@@ -23,7 +23,27 @@ def function(name):
 
 with tempfile.TemporaryDirectory() as directory:
     path = Path(directory)
-    mock_header = (ROOT / "audit/reproduce.py").read_text().split("(d / 'Arduino.h').write_text(r'''")[1].split("''')")[0]
+    mock_header = r'''
+#pragma once
+#include <string>
+#include <cstring>
+#include <cstdio>
+#include <cstdint>
+#include <algorithm>
+class String : public std::string {
+public:
+ using std::string::string;
+ String(const std::string &s):std::string(s){}
+ String(float value, uint8_t precision) {char b[128]; snprintf(b,sizeof b,"%.*f",precision,value); assign(b);}
+ bool endsWith(const char *s) const {return size()>=strlen(s) && compare(size()-strlen(s),strlen(s),s)==0;}
+ bool startsWith(const char *s) const {return rfind(s,0)==0;}
+ void remove(size_t n){erase(n);}
+ int indexOf(char c) const {auto n=find(c);return n==npos ? -1 : int(n);}
+ char charAt(size_t n) const {return at(n);}
+ bool isEmpty() const {return empty();}
+};
+#define F(x) x
+'''
     (path / "Arduino.h").write_text(mock_header)
     code = r'''
 #include "Arduino.h"
