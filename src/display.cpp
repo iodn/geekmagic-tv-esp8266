@@ -1600,9 +1600,9 @@ void renderMarketsPage() {
     const MarketData *market = effectiveMarketData(index);
     drawScreenChrome("Markets");
     drawItemPosition();
-    drawDisplayLabel(market->symbol, 8, 8, 168, TL_DATUM, theme.accent, FONT_BODY);
     drawDisplayLabel(market->label[0] != '\0' ? market->label : "Live feed",
-                     120, 40, 224, TC_DATUM, theme.muted);
+                     8, 8, 168, TL_DATUM, theme.accent, FONT_BODY);
+    drawDisplayLabel(market->symbol, 120, 40, 224, TC_DATUM, theme.muted);
     drawHeroText(formatMarketPrice(index, market->price), 64, 68, theme.text);
     String change = (market->changePercent >= 0.0f ? "+" : "") + trimTrailingZeros(market->changePercent,
                        fabsf(market->changePercent) >= 10.0f ? 1 : 2) + "%";

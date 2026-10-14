@@ -82,7 +82,7 @@ int main(int argc,char**argv){
    assert(hasDraw("12:34"));
    if(page!=DASHBOARD_PAGE_CLOCK){bool footer=false;for(auto &d:textDraws)if(d.text=="12:34"&&d.y>=212)footer=true;assert(footer);}
    tft.save(std::string(argv[1])+"/theme-"+std::to_string(theme)+"-page-"+std::to_string(page)+".ppm");
-   if(page==DASHBOARD_PAGE_MARKETS){assert(hasDraw("Bitcoin")&&!hasDraw("Microsoft"));for(auto&d:textDraws)if(d.text=="+2.54%")assert(d.h>=52);}
+   if(page==DASHBOARD_PAGE_MARKETS){assert(hasDraw("Bitcoin")&&!hasDraw("Microsoft"));for(auto&d:textDraws){if(d.text=="Bitcoin")assert(d.x==8&&d.y==8&&d.font==FONT_BODY&&d.color==activeTheme().accent);if(d.text=="BTC")assert(d.y==40&&d.font==FONT_LABEL&&d.color==activeTheme().muted);}for(auto&d:textDraws)if(d.text=="+2.54%")assert(d.h>=52);}
    if(page==DASHBOARD_PAGE_WEATHER)for(auto&d:textDraws)if(d.text=="22C")assert(d.h>=78);
   }
  }

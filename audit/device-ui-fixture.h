@@ -41,7 +41,7 @@ constexpr int FONT_INFO=1, FONT_LABEL=2, FONT_BODY=4, FONT_TITLE=6, FONT_HUGE=7;
 constexpr int TL_DATUM=0, TC_DATUM=1, TR_DATUM=2, MC_DATUM=4;
 constexpr int DISPLAY_WIDTH=240, DISPLAY_HEIGHT=240;
 constexpr uint32_t kFnvPrime=16777619UL,kFnvOffset=2166136261UL;
-struct TextDraw {String text; int x,y,w,h,font,size;};
+struct TextDraw {String text; int x,y,w,h,font,size;uint16_t color;};
 std::vector<TextDraw> textDraws;
 bool collectDraws=true;
 struct Canvas {
@@ -102,7 +102,7 @@ struct Canvas {
         if(datum==TC_DATUM||datum==MC_DATUM)x-=w/2;
         else if(datum==TR_DATUM)x-=w;
         if(datum==MC_DATUM)y-=h/2;
-        if(collectDraws)textDraws.push_back({s,x,y,w,h,f,textSize});
+        if(collectDraws)textDraws.push_back({s,x,y,w,h,f,textSize,foreground});
         for(unsigned char c:s){glyph(c,x,y,f);x+=charWidth(c,f)*textSize;}
     }
     void save(const std::string&path) {
