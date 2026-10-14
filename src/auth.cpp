@@ -104,6 +104,10 @@ bool writeAuthConfig() {
         doc["provisionedPassword"] = authConfig.provisionedPassword;
     }
 
+    if (doc.overflowed()) {
+        return false;
+    }
+
     char tempPath[40];
     if (!buildTempPath(AUTH_CONFIG_PATH, tempPath, sizeof(tempPath))) {
         return false;
@@ -115,8 +119,10 @@ bool writeAuthConfig() {
         return false;
     }
 
-    bool success = serializeJson(doc, file) > 0;
+    size_t expectedSize = measureJson(doc);
+    size_t writtenSize = serializeJson(doc, file);
     file.flush();
+    bool success = writtenSize == expectedSize && file.size() == expectedSize;
     file.close();
     if (!success) {
         LittleFS.remove(tempPath);

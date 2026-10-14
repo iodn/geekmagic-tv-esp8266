@@ -491,7 +491,7 @@ bool writeJsonToFile(const char *path, JsonDocument &doc) {
         return false;
     }
 
-    bool success = serializeJson(doc, file) > 0;
+    bool success = !doc.overflowed() && serializeJson(doc, file) == measureJson(doc);
     file.flush();
     file.close();
     if (!success) {
