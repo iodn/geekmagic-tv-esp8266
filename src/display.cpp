@@ -1363,7 +1363,7 @@ bool ensureClockDynamicSprite() {
     clockDynamicSpriteAttempted = true;
     uint32_t freeHeap = ESP.getFreeHeap();
     if (freeHeap < kClockSpriteMinFreeHeapBytes) {
-        logPrintf("Clock sprite skipped, free heap too low: %u", freeHeap);
+        logPrintf(F("Clock sprite skipped, free heap too low: %u"), freeHeap);
         return false;
     }
 
@@ -1373,12 +1373,12 @@ bool ensureClockDynamicSprite() {
         clockDynamicSprite.createSprite(kClockDynamicRegionWidth, kClockDynamicRegionHeight) != nullptr;
 
     if (clockDynamicSpriteReady) {
-        logPrintf("Clock sprite ready (%dx%d), free heap now %u",
+        logPrintf(F("Clock sprite ready (%dx%d), free heap now %u"),
                   kClockDynamicRegionWidth,
                   kClockDynamicRegionHeight,
                   ESP.getFreeHeap());
     } else {
-        logPrintf("Clock sprite allocation failed, free heap was %u", freeHeap);
+        logPrintf(F("Clock sprite allocation failed, free heap was %u"), freeHeap);
     }
 
     return clockDynamicSpriteReady;
@@ -2143,7 +2143,7 @@ void setBacklightLevel(int brightness, bool rememberPreference, bool shouldLog =
     appliedBrightness = boundedBrightness;
     backlightOn = boundedBrightness > 0;
     if (shouldLog) {
-        logPrintf("Brightness: %d%%, PWM: %d", boundedBrightness, pwmValue);
+        logPrintf(F("Brightness: %d%%, PWM: %d"), boundedBrightness, pwmValue);
     }
 }
 
@@ -2272,7 +2272,7 @@ void displaySuspendDynamicResources() {
             clockDynamicSpriteReady = false;
             clockDynamicSpriteAttempted = false;
             clockDynamicSpriteAllowed = false;
-            logPrintf("Display resources suspended, free heap now %u", ESP.getFreeHeap());
+            logPrintf(F("Display resources suspended, free heap now %u"), ESP.getFreeHeap());
         }
     }
 
@@ -2631,7 +2631,7 @@ void displayToggleBacklight() {
         logPrint(F("Backlight OFF"));
         displayApplyBrightness(0);
     } else {
-        logPrintf("Backlight ON (brightness: %d)", savedBrightness);
+        logPrintf(F("Backlight ON (brightness: %d)"), savedBrightness);
         displayApplyBrightness(savedBrightness > 0 ? savedBrightness : 100);
     }
 }

@@ -576,7 +576,7 @@ void startQueuedWiFiConnect() {
     wifiConnectTask.startedAtMs = millis();
     wifiConnectTask.ipWaitStartedAtMs = 0;
 
-    logPrintf("Starting WiFi connect task for SSID: %s", wifiConnectTask.ssid);
+    logPrintf(F("Starting WiFi connect task for SSID: %s"), wifiConnectTask.ssid);
     displayState.showImage = false;
     displayState.apMode = false;
     wifiFailsafeMode = false;

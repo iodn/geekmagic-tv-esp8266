@@ -9,6 +9,7 @@ code=r'''
 #include <cassert>
 #include <cstdint>
 #include <cstddef>
+#define F(x) x
 constexpr int kClockDynamicRegionWidth=216,kClockDynamicRegionHeight=64;
 bool clockDynamicSpriteAllowed=true,clockDynamicSpriteReady=false,clockDynamicSpriteAttempted=false;
 struct {uint32_t heap=20000;uint32_t getFreeHeap(){return heap;}} ESP;

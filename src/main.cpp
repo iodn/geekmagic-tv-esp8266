@@ -42,7 +42,7 @@ constexpr uint32_t kOptionalServiceMinFreeHeapBytes = 8000UL;
 constexpr uint32_t kOptionalServiceRetryLogMs = 5000UL;
 
 void logHeapState(const char *stage) {
-    logPrintf("Free heap after %s: %u", stage, ESP.getFreeHeap());
+    logPrintf(F("Free heap after %s: %u"), stage, ESP.getFreeHeap());
 }
 
 void logOptionalServiceDelay(const char *serviceName, uint32_t freeHeap) {
@@ -52,7 +52,7 @@ void logOptionalServiceDelay(const char *serviceName, uint32_t freeHeap) {
     }
 
     lastOptionalServiceLogAt = now;
-    logPrintf("Deferring %s, free heap too low: %u", serviceName, freeHeap);
+    logPrintf(F("Deferring %s, free heap too low: %u"), serviceName, freeHeap);
 }
 
 const char* describeResetReason(uint8_t reason) {
@@ -166,7 +166,7 @@ void monitorWiFi() {
             WiFi.mode(WIFI_STA);
             displayState.apMode = false;
             displayBlankScreen();
-            logPrintf("WiFi connected: %s", WiFi.localIP().toString().c_str());
+            logPrintf(F("WiFi connected: %s"), WiFi.localIP().toString().c_str());
         }
         return;
     }
@@ -345,13 +345,13 @@ void clearImageDirectory() {
     while (dir.next()) {
         String filepath = dir.fileName();
         if (LittleFS.remove(filepath)) {
-            logPrintf("Deleted: %s", filepath.c_str());
+            logPrintf(F("Deleted: %s"), filepath.c_str());
             filesDeleted++;
         } else {
-            logPrintf("Failed to delete: %s", filepath.c_str());
+            logPrintf(F("Failed to delete: %s"), filepath.c_str());
         }
     }
-    logPrintf("Cleared %d files from image directory.", filesDeleted);
+    logPrintf(F("Cleared %d files from image directory."), filesDeleted);
 }
 
 void setupFilesystem() {
@@ -408,11 +408,11 @@ void setup() {
 
     logPrint(F("SmartClock Starting..."));
 
-    logPrintf("Firmware Version: %d", FIRMWARE_VERSION);
+    logPrintf(F("Firmware Version: %d"), FIRMWARE_VERSION);
 
     const rst_info* resetInfo = ESP.getResetInfoPtr();
     uint8_t resetReason = resetInfo ? resetInfo->reason : 0xFF;
-    logPrintf("Reset reason: %s (%u)", describeResetReason(resetReason), resetReason);
+    logPrintf(F("Reset reason: %s (%u)"), describeResetReason(resetReason), resetReason);
 
 
 
@@ -517,7 +517,7 @@ void setup() {
         setupFilesystem();
         authInit();
         if (authWasProvisionedThisBoot()) {
-            logPrintf("Admin credentials provisioned: user=%s password=%s",
+            logPrintf(F("Admin credentials provisioned: user=%s password=%s"),
                       authUsername(),
                       authProvisionedPassword());
             displayShowMessage(String(F("Admin login\n")) + authUsername() + "\n" + authProvisionedPassword());
@@ -617,11 +617,11 @@ void setup() {
 
     if (wifiFailsafeMode) {
 
-        logPrintf("Running in FAILSAFE mode. AP IP: %s", WiFi.softAPIP().toString().c_str());
+        logPrintf(F("Running in FAILSAFE mode. AP IP: %s"), WiFi.softAPIP().toString().c_str());
 
     } else {
 
-        logPrintf("Setup complete. IP: %s", WiFi.localIP().toString().c_str());
+        logPrintf(F("Setup complete. IP: %s"), WiFi.localIP().toString().c_str());
 
     }
 

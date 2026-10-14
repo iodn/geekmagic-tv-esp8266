@@ -968,13 +968,13 @@ bool httpGetJson(const String &url,
                              : ("HTTP " + String(responseCode));
             }
             if (responseCode < 0 && httpError.length() > 0) {
-                logPrintf("%s GET failed: %d %s (%s)",
+                logPrintf(F("%s GET failed: %d %s (%s)"),
                           transportLabel,
                           responseCode,
                           httpError.c_str(),
                           "feed request");
             } else {
-                logPrintf("%s GET failed: %d (%s)", transportLabel, responseCode, "feed request");
+                logPrintf(F("%s GET failed: %d (%s)"), transportLabel, responseCode, "feed request");
             }
             http.end();
             return false;
@@ -1001,7 +1001,7 @@ bool httpGetJson(const String &url,
                              ? "JSON memory exhausted"
                              : String(jsonError.c_str());
             }
-            logPrintf("%s JSON parse failed: %s (%s)", transportLabel, jsonError.c_str(), "feed request");
+            logPrintf(F("%s JSON parse failed: %s (%s)"), transportLabel, jsonError.c_str(), "feed request");
             return false;
         }
 
@@ -1340,7 +1340,7 @@ bool syncWeather(String *error) {
     runtime.syncing = false;
     runtime.lastSuccessMs = millis();
     runtime.lastError[0] = '\0';
-    logPrintf("Weather sync OK: %s %d", runtime.data.location, runtime.data.temperature);
+    logPrintf(F("Weather sync OK: %s %d"), runtime.data.location, runtime.data.temperature);
     return true;
 }
 
@@ -1779,7 +1779,7 @@ bool syncMarket(uint8_t index, String *error) {
     runtime.hasData = true;
     runtime.lastSuccessMs = millis();
     runtime.lastError[0] = '\0';
-    logPrintf("Market sync OK: slot=%u symbol=%s price=%.2f",
+    logPrintf(F("Market sync OK: slot=%u symbol=%s price=%.2f"),
               index,
               runtime.data.symbol,
               runtime.data.price);

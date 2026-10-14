@@ -34,6 +34,16 @@ void logPrintf(const char* format, ...) {
     logPrint(String(buffer));
 }
 
+void logPrintf(const __FlashStringHelper* format, ...) {
+    char buffer[LOG_LINE_LENGTH];
+    va_list args;
+    va_start(args, format);
+    vsnprintf_P(buffer, sizeof(buffer), reinterpret_cast<PGM_P>(format), args);
+    va_end(args);
+
+    logPrint(String(buffer));
+}
+
 String logGetAll() {
     String result = "";
     result.reserve(LOG_BUFFER_SIZE * LOG_LINE_LENGTH);

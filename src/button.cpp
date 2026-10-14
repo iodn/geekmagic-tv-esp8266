@@ -13,7 +13,7 @@ void buttonInit() {
     pinMode(PIN_BUTTON, INPUT_PULLUP);
     lastButtonState = digitalRead(PIN_BUTTON);
     currentButtonState = lastButtonState;
-    logPrintf("Button initialized on GPIO%d (INPUT_PULLUP)", PIN_BUTTON);
+    logPrintf(F("Button initialized on GPIO%d (INPUT_PULLUP)"), PIN_BUTTON);
 }
 
 ButtonPress buttonUpdate() {
@@ -35,21 +35,21 @@ ButtonPress buttonUpdate() {
             if (currentButtonState == LOW && !buttonPressed) {
                 buttonPressStartTime = millis();
                 buttonPressed = true;
-                logPrint("Button pressed");
+                logPrint(F("Button pressed"));
             }
             // Button was just released (LOW -> HIGH with pullup)
             else if (currentButtonState == HIGH && buttonPressed) {
                 unsigned long pressDuration = millis() - buttonPressStartTime;
                 buttonPressed = false;
 
-                logPrintf("Button released after %lu ms", pressDuration);
+                logPrintf(F("Button released after %lu ms"), pressDuration);
 
                 // Determine press type
                 if (pressDuration >= BUTTON_LONG_PRESS_MIN_MS) {
-                    logPrint("Long press detected");
+                    logPrint(F("Long press detected"));
                     return BUTTON_LONG;
                 } else if (pressDuration <= BUTTON_SHORT_PRESS_MAX_MS) {
-                    logPrint("Short press detected");
+                    logPrint(F("Short press detected"));
                     return BUTTON_SHORT;
                 }
                 // Between short and long threshold - ignore

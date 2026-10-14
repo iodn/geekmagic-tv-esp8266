@@ -9,6 +9,7 @@
 void loggerInit();
 void logPrint(const String &msg);
 void logPrintf(const char* format, ...);
+void logPrintf(const __FlashStringHelper* format, ...);
 String logGetAll();
 
 #endif
