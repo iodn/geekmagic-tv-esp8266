@@ -52,7 +52,7 @@ void sendJsonResponse(int code,const String&text){status=code;response=text;}
 void settingsBuildHostname(const char*name,char*buffer,size_t n){snprintf(buffer,n,"%s",name);}
 void settingsDefaultDeviceName(char*buffer,size_t n){snprintf(buffer,n,"default-clock");}
 void settingsSanitizeDeviceName(const char*name,char*buffer,size_t n){snprintf(buffer,n,"%s",name?name:"");}
-void settingsSave(const Settings&){++saves;}
+bool settingsSaveSuccess=true;bool settingsSave(const Settings&){++saves;return settingsSaveSuccess;}
 void configTime(long,int,const char*){++ntpCalls;}
 void applyEffectiveBrightness(bool){++brightnessCalls;}
 bool displayHasDraftChanges(){return false;}
@@ -80,6 +80,11 @@ int main(){
  // Clamped timezone inputs must also avoid repeated NTP restarts.
  settings["gmtOffset"]=999999;applyRuntimeSettingsObject(settings.as<JsonObjectConst>(),false,&error);assert(ntpCalls==2);assert(appSettings.gmtOffset==14*3600);
  applyRuntimeSettingsObject(settings.as<JsonObjectConst>(),false,&error);assert(ntpCalls==2);
+ settingsSaveSuccess=false;settings["brightness"]=40;int savedBrightness=savedAppSettings.brightness;
+ assert(!applyRuntimeSettingsObject(settings.as<JsonObjectConst>(),true,&error));
+ assert(error=="Failed to save settings" && savedAppSettings.brightness==savedBrightness);
+ settingsSaveSuccess=true;assert(applyRuntimeSettingsObject(settings.as<JsonObjectConst>(),true,&error));
+ assert(savedAppSettings.brightness==40);
  handleAppJson();assert(status==200);JsonDocument app;assert(!deserializeJson(app,response.c_str()));assert(app["hostName"]=="active-clock");assert(app["configuredHostName"]=="configured-clock");assert(app["rebootRequired"]==true);
  handleVersionJson();assert(!deserializeJson(app,response.c_str()));assert(app["hostName"]=="active-clock");
  strcpy(appSettings.deviceName,"active-clock");handleAppJson();assert(!deserializeJson(app,response.c_str()));assert(app["rebootRequired"]==false);

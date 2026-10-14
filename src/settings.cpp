@@ -391,16 +391,27 @@ void settingsLoad(Settings &settings) {
     }
 }
 
-void settingsSave(const Settings &settings) {
+bool settingsSave(const Settings &settings) {
     Settings tempSettings = normalizeSettingsForSave(settings);
     tempSettings.crc = settingsCalculateCRC(tempSettings);
 
     uint16_t magic = SETTINGS_MAGIC;
+    uint16_t previousMagic;
+    Settings previousSettings;
+    EEPROM.get(SETTINGS_ADDR, previousMagic);
+    EEPROM.get(SETTINGS_ADDR + 2, previousSettings);
     EEPROM.put(SETTINGS_ADDR, magic);
     EEPROM.put(SETTINGS_ADDR + 2, tempSettings);
-    EEPROM.commit();
+    if (!EEPROM.commit()) {
+        // A later boot-counter commit must not silently persist a failed settings save.
+        EEPROM.put(SETTINGS_ADDR, previousMagic);
+        EEPROM.put(SETTINGS_ADDR + 2, previousSettings);
+        Serial.println(F("Settings save failed"));
+        return false;
+    }
 
     Serial.println(F("Settings saved with CRC validation"));
+    return true;
 }
 
 // Boot counter functions for failure detection

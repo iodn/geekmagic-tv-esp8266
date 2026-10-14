@@ -447,8 +447,11 @@ bool applyRuntimeSettingsObject(JsonObjectConst settings, bool persist, String *
         applyEffectiveBrightness(brightnessChanged);
     }
 
-    if (persist && changed) {
-        settingsSave(appSettings);
+    if (persist && (changed || displayHasDraftChanges())) {
+        if (!settingsSave(appSettings)) {
+            if (error != nullptr) *error = "Failed to save settings";
+            return false;
+        }
         captureSavedSettings();
     }
 
@@ -496,7 +499,10 @@ bool applyDashboardPayload(JsonDocument &doc, bool persist, String *error = null
             }
             return false;
         }
-        settingsSave(appSettings);
+        if (!settingsSave(appSettings)) {
+            if (error != nullptr) *error = "Failed to save settings";
+            return false;
+        }
         captureSavedSettings();
     }
 
@@ -831,9 +837,12 @@ void handleDashboardConfigSave() {
     }
 
     currentTheme = dashboardConfig.theme;
-    if (appSettings.theme != currentTheme) {
+    if (appSettings.theme != currentTheme || displayHasDraftChanges()) {
         appSettings.theme = currentTheme;
-        settingsSave(appSettings);
+        if (!settingsSave(appSettings)) {
+            sendTextResponse(500, "Failed to save settings");
+            return;
+        }
         captureSavedSettings();
     }
     applyEffectiveBrightness(false);
@@ -866,9 +875,12 @@ void handleDashboardReset() {
     }
 
     currentTheme = dashboardConfig.theme;
-    if (appSettings.theme != currentTheme) {
+    if (appSettings.theme != currentTheme || displayHasDraftChanges()) {
         appSettings.theme = currentTheme;
-        settingsSave(appSettings);
+        if (!settingsSave(appSettings)) {
+            sendTextResponse(500, "Failed to save settings");
+            return;
+        }
         captureSavedSettings();
     }
     applyEffectiveBrightness(false);
@@ -913,7 +925,10 @@ void handleDashboardSave() {
             sendTextResponse(500, "Failed to save dashboard");
             return;
         }
-        settingsSave(appSettings);
+        if (!settingsSave(appSettings)) {
+            sendTextResponse(500, "Failed to save settings");
+            return;
+        }
         captureSavedSettings();
         applyEffectiveBrightness(false);
     }
