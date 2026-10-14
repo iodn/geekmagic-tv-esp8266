@@ -1,0 +1,87 @@
+Firmware and UI smoothness review — 2026-10-14
+
+This pass starts from 830e993, after the prior 27-finding audit fixes.
+The earlier audit/fix-verification.txt records that earlier build; measurements
+below describe the current implementation. Nothing was pushed or flashed.
+
+Changes and individual implementation commits
+
+f3d8f83: World-clock text fits its 118-pixel region, and the clear region covers
+          the full font height. Previously a 26-pixel clear could leave fragments
+          of 48-pixel glyphs and oversized time text could overflow the region.
+48ccc84: Focus, world-clock and event text share the existing 1 bpp clock buffer.
+          A cropped push sends complete text without first blanking the screen.
+          Focus duration labels are drawn with the static page instead of every
+          countdown update. No additional framebuffer was allocated.
+e334e1f: Delayed reset responses preserve newer dashboard/feed edits.
+1734123: Refresh responses preserve local edits made before or during the request,
+          and do not cancel pending previews. Clean forms still hydrate normally.
+6206088: The login dialog keeps keyboard focus inside visible controls, makes the
+          background inert, and returns focus to the current tab after login.
+          Page chips show keyboard focus; auth/sync messages expose live semantics.
+ef31678: Failed EEPROM settings commits return failure, keep the previous saved
+          snapshot, and restore the EEPROM RAM buffer so a later counter commit
+          does not silently persist the failed candidate. API saves return an
+          error rather than claiming success. This cannot restore a flash sector
+          already erased by a failing physical write; power-loss safety remains
+          a device-level limitation of EEPROM emulation.
+a6e3e54: File upload controls and long device names no longer force horizontal
+          overflow on small screens. Native browser checks reproduce both cases.
+1c14695: mDNS/OTA can initialize at realistic free-heap levels, while retaining an
+          8 KB low-heap gate and the existing retry/warmup behavior. The previous
+          28 KB gate was close to the build's entire available DRAM heap.
+eaf5215: The roughly 1.7 KB display buffer can activate with 10 KB free, leaving
+          at least 8 KB headroom. Previously its 30 KB gate exceeded the maximum
+          possible primary heap in this build. TLS still suspends this buffer.
+e621e44: Formatted/static diagnostics are stored in flash, recovering 860 bytes
+          of measured static RAM. Log messages and ring-buffer behavior remain.
+f4d32ab: Focus redraw hashes track visible duration text and pixel progress,
+          avoiding updates when a long timer's displayed minute is unchanged.
+          The progress calculation is shared by rendering and invalidation.
+7ed9a21: Static API error/feedback strings move to flash, recovering another
+          1,664 bytes of measured static RAM before compression integration.
+d927913: PlatformIO generates deterministic gzip pages from editable webui.h.
+          The actual root and OTA handlers send flash bytes with explicit lengths
+          and Content-Encoding. The raw pages are absent from linked firmware.
+
+Current verification
+
+pio run: PASS. Pinned ESP8266 platform/core builds successfully.
+Static RAM: 50,744 / 81,920 bytes (61.9%). Previous pass: 53,240 bytes.
+Flash: 728,019 / 1,044,464 bytes (69.7%). Previous pass: 857,155 bytes.
+Measured changes: 2,496 bytes less static RAM, 129,136 bytes less flash.
+Static RAM is not a measurement of runtime heap or fragmentation.
+
+python3 audit/reproduce.py: PASS, 13 suites (12 Python plus embedded JS checks).
+The new suites exercise EEPROM commit failure/rollback, the actual display heap
+allocation gate, deterministic gzip generation, and the actual root/OTA handlers.
+Display checks exercise cropped-buffer pushes, fallback bounds, font fitting,
+focus progress and visible-state redraw hashes. UI checks delay reset/refresh
+responses and exercise edits while requests are pending and keyboard focus wraps.
+Existing storage, credentials, feed scheduling, JPEG and API regressions pass.
+
+Browser verification: PASS, using audit/browser-ui.cjs with installed Playwright
+and Chromium, local fixture HTTP endpoints, and WEB_ASSET_HEADER pointing to
+.pio/build/nodemcuv2/generated/webui_gzip.h. Chromium receives real gzip HTTP bytes
+and loads the generated dashboard and OTA page. Tests check login focus/inert
+background, short landscape login controls, both themes, all six tabs at
+320/375/1280 pixels with a long device name, chip focus styling, OTA widths, and
+absence of page errors. These tests do not contact a TV.
+
+Page payloads: dashboard 144,366 -> 24,379 bytes; OTA 17,833 -> 4,953 bytes.
+Each generated asset decompresses to the exact source HTML bytes. Re-running the
+builder leaves an unchanged header untouched, avoiding needless recompilation.
+
+Firmware binary SHA256:
+a3fef2c1571ab59c4751d694bfd8d6f7b415cce4cc4742d2cfccf230137ec49b
+
+Remaining verification and scope
+
+An actual TV is needed to confirm visible flicker, clock readability, sustained
+WiFi/TLS and cooperative-stack stability, free heap/largest block during mixed
+requests, and mDNS/OTA behavior at the adjusted memory gates. Low-heap fallback
+still draws directly to the screen; page changes still redraw full pages. This
+work does not claim that every possible source of physical flicker is removed.
+No serial TV connection or supplied device address was available during this pass.
+Hardware access was requested; the overall improvement goal remains active until
+its remaining device checks can be addressed. No firmware flash was performed.
