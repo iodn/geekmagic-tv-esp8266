@@ -2470,6 +2470,12 @@ void displayInvalidateImage(const char *path) {
     }
 }
 
+void displayServiceTemporaryMessage() {
+    if (temporaryMessageExpired()) {
+        displayUpdate();
+    }
+}
+
 void displayRenderImage(const char *path) {
     if (!LittleFS.exists(path)) {
         displayShowMessage(F("Image not found"));

@@ -927,6 +927,7 @@ void loop() {
         }
     }
 
+    displayServiceTemporaryMessage();
     dashboardSyncRuntimeState();
     if (millis() - lastDisplayProfileCheck > kDisplayProfileCheckMs) {
         webserverApplyEffectiveBrightness(false);
@@ -949,9 +950,7 @@ void loop() {
     maybeEnableClockSprite();
 
     if (millis() - lastDisplayUpdate > DISPLAY_UPDATE_INTERVAL) {
-        if (!displayState.showImage) {
-            displayUpdate();
-        }
+        displayUpdate();
         lastDisplayUpdate = millis();
     }
 
