@@ -1913,6 +1913,7 @@ const dashboardPageControls = [
 
 let hydrating = false;
 let dirty = false;
+let widgetBaseline = {};
 let liveTimer = 0;
 let livePromise = Promise.resolve();
 let feedDirty = false;
@@ -2576,6 +2577,7 @@ function applyDashboardState(dashboardState) {
     const status = data.status || {};
     setValue("statusLine1", status.line1 || "");
     setValue("statusLine2", status.line2 || "");
+    widgetBaseline = buildWidgetSnapshot();
 }
 
 function updateWeatherModeUI() {
@@ -2819,7 +2821,7 @@ function buildConfigPayload() {
     };
 }
 
-function buildWidgetPayload() {
+function buildWidgetSnapshot() {
     return {
         focus: {
             label: document.getElementById("focusLabel").value.trim(),
@@ -2847,6 +2849,22 @@ function buildWidgetPayload() {
             line2: document.getElementById("statusLine2").value.trim()
         }
     };
+}
+
+function buildWidgetPayload(snapshot = buildWidgetSnapshot()) {
+    const changed = {};
+    for (const [key, value] of Object.entries(snapshot)) {
+        if (Array.isArray(value)) {
+            if (JSON.stringify(value) !== JSON.stringify(widgetBaseline[key])) changed[key] = value;
+        } else {
+            const fields = {};
+            for (const [field, next] of Object.entries(value)) {
+                if (next !== widgetBaseline[key]?.[field]) fields[field] = next;
+            }
+            if (Object.keys(fields).length) changed[key] = fields;
+        }
+    }
+    return changed;
 }
 
 function buildFeedPayload() {
@@ -2986,6 +3004,7 @@ async function commitState() {
         await flushLiveSync();
         setSyncState("Saving", "pending");
 
+        const snapshot = buildWidgetSnapshot();
         const response = await postJson("/dashboard/save", buildLivePayload());
         if (!response.ok) {
             throw new Error(await response.text());
@@ -2996,6 +3015,7 @@ async function commitState() {
             defaultDeviceName: deviceIdentity.defaultDeviceName,
             hostName: buildHostnameFromDeviceName(document.getElementById("deviceName").value.trim())
         });
+        widgetBaseline = snapshot;
         dirty = false;
         updateActionButtons();
         setSyncState("Saved", "saved");

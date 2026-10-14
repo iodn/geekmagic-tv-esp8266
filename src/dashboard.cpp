@@ -711,7 +711,9 @@ void applyFocusObject(JsonObjectConst focus) {
     bool wasRunning = dashboardData.focus.running;
     bool runningProvided = !focus["running"].isNull();
     bool remainingProvided = !focus["remainingSeconds"].isNull();
+    bool remainingChanged = remainingProvided && focus["remainingSeconds"].as<uint32_t>() != dashboardData.focus.remainingSeconds;
     bool updatedAtProvided = !focus["updatedAtEpoch"].isNull();
+    int32_t currentRemaining = dashboardFocusRemainingSeconds();
 
     if (!focus["label"].isNull()) {
         copyString(dashboardData.focus.label, sizeof(dashboardData.focus.label), focus["label"]);
@@ -730,15 +732,14 @@ void applyFocusObject(JsonObjectConst focus) {
     }
     if (runningProvided) {
         bool newRunning = focus["running"].as<bool>();
-        if (wasRunning && !newRunning && !remainingProvided) {
-            int32_t pausedRemaining = dashboardFocusRemainingSeconds();
-            dashboardData.focus.remainingSeconds = pausedRemaining > 0 ? static_cast<uint32_t>(pausedRemaining) : 0U;
+        if (wasRunning && !newRunning && !remainingChanged) {
+            dashboardData.focus.remainingSeconds = currentRemaining > 0 ? static_cast<uint32_t>(currentRemaining) : 0U;
         }
         dashboardData.focus.running = newRunning;
     }
 
     uint32_t now = dashboardCurrentEpoch();
-    if (remainingProvided && !updatedAtProvided) {
+    if (remainingChanged && !updatedAtProvided) {
         dashboardData.focus.updatedAtEpoch = now;
     } else if (runningProvided && dashboardData.focus.running && !wasRunning && !updatedAtProvided) {
         dashboardData.focus.updatedAtEpoch = now;
@@ -784,8 +785,9 @@ void applyEventObject(JsonObjectConst event) {
         copyString(dashboardData.event.subtitle, sizeof(dashboardData.event.subtitle), event["subtitle"]);
     }
     if (!event["remainingSeconds"].isNull()) {
+        bool remainingChanged = dashboardData.event.remainingSeconds != event["remainingSeconds"].as<uint32_t>();
         dashboardData.event.remainingSeconds = event["remainingSeconds"].as<uint32_t>();
-        if (event["updatedAtEpoch"].isNull()) {
+        if (remainingChanged && event["updatedAtEpoch"].isNull()) {
             dashboardData.event.updatedAtEpoch = dashboardCurrentEpoch();
         }
     }
@@ -970,8 +972,21 @@ bool dashboardPreviewDataJson(const String &json, String *error) {
         return false;
     }
 
+    FocusData previousFocus = dashboardData.focus;
+    EventData previousEvent = dashboardData.event;
     memcpy(&dashboardData, &savedDashboardData, sizeof(dashboardData));
     applyDataObject(doc.as<JsonObjectConst>());
+    JsonObjectConst focus = doc["focus"].as<JsonObjectConst>();
+    JsonObjectConst event = doc["event"].as<JsonObjectConst>();
+    if (!focus["remainingSeconds"].isNull() && focus["updatedAtEpoch"].isNull() &&
+        dashboardData.focus.remainingSeconds == previousFocus.remainingSeconds &&
+        dashboardData.focus.running == previousFocus.running) {
+        dashboardData.focus.updatedAtEpoch = previousFocus.updatedAtEpoch;
+    }
+    if (!event["remainingSeconds"].isNull() && event["updatedAtEpoch"].isNull() &&
+        dashboardData.event.remainingSeconds == previousEvent.remainingSeconds) {
+        dashboardData.event.updatedAtEpoch = previousEvent.updatedAtEpoch;
+    }
     dashboardDataDraftActive = !dataEquals(dashboardData, savedDashboardData);
     return true;
 }
