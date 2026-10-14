@@ -91,6 +91,10 @@ struct HomeAssistantSlotData {
     bool enabled;
     bool hasData;
     bool numeric;
+    bool stale;
+    uint32_t lastAttemptMs;
+    uint32_t lastSuccessMs;
+    char lastError[64];
     char entityId[72];
     char label[24];
     char state[24];

@@ -755,6 +755,9 @@ void fillHomeAssistantSlotDataJson(JsonObject root, const HomeAssistantSlotData 
     root["enabled"] = slot.enabled;
     root["hasData"] = slot.hasData;
     root["numeric"] = slot.numeric;
+    root["lastError"] = slot.lastError;
+    root["lastAttemptAgeSec"] = slot.lastAttemptMs ? static_cast<long>((millis() - slot.lastAttemptMs) / 1000UL) : -1;
+    root["lastSuccessAgeSec"] = slot.lastSuccessMs ? static_cast<long>((millis() - slot.lastSuccessMs) / 1000UL) : -1;
     root["entityId"] = slot.entityId;
     root["label"] = slot.label;
     root["state"] = slot.state;
@@ -1569,6 +1572,8 @@ bool syncHomeAssistantSlot(uint8_t index, String *error) {
     runtimeSlot.enabled = true;
     runtimeSlot.hasData = true;
     runtimeSlot.numeric = numeric;
+    runtimeSlot.lastAttemptMs = millis();
+    runtimeSlot.lastSuccessMs = millis();
     copyString(runtimeSlot.entityId, sizeof(runtimeSlot.entityId), entityId.c_str());
     copyString(runtimeSlot.label, sizeof(runtimeSlot.label), label.c_str());
     copyString(runtimeSlot.state, sizeof(runtimeSlot.state), displayState.c_str());
@@ -1609,7 +1614,12 @@ bool syncHomeAssistant(String *error) {
 
         anyConfigured = true;
         String slotError;
+        runtime.slots[index].enabled = true;
+        runtime.slots[index].lastAttemptMs = millis();
         bool success = syncHomeAssistantSlot(index, &slotError);
+        if (!success) {
+            copyString(runtime.slots[index].lastError, sizeof(runtime.slots[index].lastError), slotError.c_str());
+        }
         anySuccess = anySuccess || success;
         if (!success && firstError.length() == 0) {
             firstError = slotError;
@@ -1641,9 +1651,9 @@ bool syncHomeAssistant(String *error) {
         return false;
     }
 
-    runtime.lastSuccessMs = millis();
-    runtime.lastError[0] = '\0';
-    logPrint(F("Home Assistant sync OK"));
+    if (firstError.length() == 0) runtime.lastSuccessMs = millis();
+    copyString(runtime.lastError, sizeof(runtime.lastError), firstError.c_str());
+    logPrint(F("Home Assistant sync completed"));
     return true;
 }
 

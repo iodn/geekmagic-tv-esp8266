@@ -2674,11 +2674,11 @@ function feedStatusText(source, status, fallbackText) {
     if (status?.syncing) {
         return "Syncing";
     }
-    if (status?.hasData) {
-        return formatAge(status.lastSuccessAgeSec);
-    }
     if (status?.lastError) {
         return status.lastError.length > 24 ? `${status.lastError.slice(0, 23)}...` : status.lastError;
+    }
+    if (status?.hasData) {
+        return formatAge(status.lastSuccessAgeSec);
     }
     return fallbackText;
 }
@@ -2757,6 +2757,8 @@ function applyFeedState(feedState) {
             document.getElementById(`haSlotMeta${index}`).textContent = "Disabled";
         } else if (!slot.enabled) {
             document.getElementById(`haSlotMeta${index}`).textContent = "Off";
+        } else if (slotStatus?.lastError) {
+            document.getElementById(`haSlotMeta${index}`).textContent = slotStatus.lastError;
         } else if (slotStatus?.hasData) {
             const stateLabel = [slotStatus.state, slotStatus.unit].filter(Boolean).join(" ");
             document.getElementById(`haSlotMeta${index}`).textContent = stateLabel || "Ready";
