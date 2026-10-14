@@ -77,7 +77,7 @@ void fixture(){
 }
 int main(int argc,char**argv){
  assert(argc==2);fixture();
- for(int theme=0;theme<3;++theme){dashboardConfig.theme=theme;
+ for(int theme=0;theme<DASHBOARD_THEME_COUNT;++theme){dashboardConfig.theme=theme;
   for(int page=0;page<9;++page){displayState.currentPage=page;normalizeDashboardItem();textDraws.clear();renderDashboardPage();checkBounds();
    tft.save(std::string(argv[1])+"/theme-"+std::to_string(theme)+"-page-"+std::to_string(page)+".ppm");
    if(page==DASHBOARD_PAGE_MARKETS){assert(hasDraw("Bitcoin")&&!hasDraw("Microsoft"));for(auto&d:textDraws)if(d.text=="+2.54%")assert(d.h>=52);}
@@ -122,10 +122,11 @@ with tempfile.TemporaryDirectory() as folder:
     (temp / 'Arduino.h').write_text('#pragma once\n#include <cstdint>\n')
     (temp / 'layout.cpp').write_text(code)
     subprocess.run(['g++', '-std=c++17', '-O1', '-I'+str(temp), '-I'+str(root/'audit'),
-                    '-I'+str(root/'src'), '-I'+str(root/'.pio/libdeps/nodemcuv2/TFT_eSPI'),
+                    '-I'+str(root/'src'), '-I'+str(root/'.pio/libdeps/nodemcuv2/TFT_eSPI'), '-I'+str(root/'.pio/build/nodemcuv2/generated'),
                     str(temp/'layout.cpp'), '-o', str(temp/'layout')], check=True)
     subprocess.run([str(temp/'layout'), str(args.output)], check=True)
-for theme in range(3):
+palettes = __import__("json").loads((root / "src/device-themes.json").read_text())["palettes"]
+for theme in range(len(palettes)):
     board = Image.new('RGB', (752, 800), '#12151b')
     draw = ImageDraw.Draw(board)
     titles = ['Clock','Weather','Markets','Home','Focus','World','Event','Quote','Status']
@@ -135,3 +136,11 @@ for theme in range(3):
         board.paste(Image.open(args.output/f'theme-{theme}-page-{page}.ppm'), (x,y))
     board.save(args.output/f'device-ui-theme-{theme}.png')
 print('Exact-font preview boards:', args.output)
+
+gallery = Image.new('RGB', (1008, 1088), '#12151b')
+gallery_draw = ImageDraw.Draw(gallery)
+for theme, palette in enumerate(palettes):
+    x, y = 8 + (theme % 4) * 250, 28 + (theme // 4) * 270
+    gallery_draw.text((x, y-18), palette['label'] + ' / ' + palette['mode'], fill='white')
+    gallery.paste(Image.open(args.output / f'theme-{theme}-page-2.ppm'), (x, y))
+gallery.save(args.output / 'device-theme-gallery.png')

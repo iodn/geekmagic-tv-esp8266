@@ -1,6 +1,6 @@
 // Exercise actual embedded preview scheduling and save recovery after HTTP failures.
 const fs=require('fs'),vm=require('vm'),assert=require('assert').strict;
-const source=fs.readFileSync(require('path').join(__dirname,'../src/webui.h'),'utf8');
+const source=require('./read-webui.cjs')();
 function extract(name){
  const start=source.search(new RegExp(`^(?:async )?function ${name}\\(`,'m'));
  assert(start>=0,name);let end=source.indexOf('{',start)+1,depth=1;

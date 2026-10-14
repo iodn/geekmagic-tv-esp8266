@@ -5,7 +5,7 @@ const path = require('path');
 const http = require('http');
 const assert = require('assert').strict;
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE_PATH || 'playwright');
-const source = fs.readFileSync(path.join(__dirname, '../src/webui.h'), 'utf8');
+const source=require('./read-webui.cjs')();
 (async () => {
     const browser = await chromium.launch({headless: true, executablePath: process.env.BROWSER_EXECUTABLE});
     let fixtureServer;
@@ -79,6 +79,22 @@ const source = fs.readFileSync(path.join(__dirname, '../src/webui.h'), 'utf8');
         await page.locator('#saveDisplayButton').click();
         await page.waitForFunction(()=>document.getElementById('syncState').textContent==='Saved');
         assert.equal(previewRequests,2);assert.equal(saveRequests,1,'Save retries a failed preview in the actual browser');
+        const paletteCount=JSON.parse(fs.readFileSync(path.join(__dirname,'../src/device-themes.json'),'utf8')).palettes.length;
+        assert.equal(await page.locator('#themePicker .theme-button').count(),paletteCount);
+        assert.equal(await page.locator('#nightThemePicker .theme-button').count(),paletteCount);
+        await page.evaluate(()=>{
+            document.getElementById('customThemeEnabled').checked=true;updateCustomThemeUI();
+            document.getElementById('nightModeEnabled').checked=true;
+            document.getElementById('nightThemeEnabled').checked=true;
+            document.getElementById('nightCustomThemeEnabled').checked=true;updateNightModeUI();
+        });
+        await page.locator('#themePicker [data-theme="8"]').click();
+        assert.equal(await page.locator('#themePreset').inputValue(),'8');
+        assert.equal(await page.locator('#customThemeEnabled').isChecked(),false);
+        assert.equal(await page.locator('#nightCustomThemeEnabled').isChecked(),true);
+        await page.locator(`#nightThemePicker [data-theme="${paletteCount-1}"]`).click();
+        assert.equal(await page.locator('#nightThemePreset').inputValue(),String(paletteCount-1));
+        assert.equal(await page.locator('#nightCustomThemeEnabled').isChecked(),false);
         for (const theme of ['light','dark']) {
         await page.evaluate(nextTheme => setUiTheme(nextTheme), theme);
         for (const width of [320, 375, 1280]) {

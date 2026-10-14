@@ -30,6 +30,29 @@ Rendered previews use the firmware layout functions and the actual TFT font bitm
 - Temporary JPEG upload and rendering
 - Factory reset from the dashboard or by five quick power cycles
 
+## Device palettes
+
+Choose from 14 matched palettes for daytime and scheduled night mode: Aurora,
+Sunset, Terminal, Nord, Dracula, Mocha, Latte, Solarized Dark, Solarized Light,
+Paper, Rose, Ocean, Lavender, and Graphite. Ten are dark and four are light.
+Selecting a preset disables custom colors for that profile.
+
+Aurora, Sunset, Terminal, Paper, Rose, Ocean, Lavender, and Graphite use
+[Material 3 color utilities](https://github.com/material-foundation/material-color-utilities).
+The remaining palettes adapt [Nord](https://www.nordtheme.com/docs/colors-and-palettes/),
+[Dracula](https://github.com/dracula/dracula-theme),
+[Catppuccin](https://catppuccin.com/palette/), and
+[Solarized](https://ethanschoonover.com/solarized/).
+Some tones are adjusted for legibility on the LCD. Text and status colors meet
+4.5:1 contrast against their supported surfaces after RGB565 conversion.
+
+![Device palette previews](assets/device-theme-gallery.png)
+
+Palette definitions and provenance live in `src/device-themes.json`. The build
+uses that file for both firmware colors and dashboard swatches. Existing saved
+IDs for Aurora, Sunset, and Terminal remain compatible; their colors now use
+coordinated Material palettes.
+
 ## Hardware
 
 Target hardware:

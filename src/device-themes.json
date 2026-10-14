@@ -1,0 +1,322 @@
+{
+  "materialGeneratorVersion": "0.4.0",
+  "contrastTarget": 4.5,
+  "palettes": [
+    {
+      "id": 0,
+      "label": "Aurora",
+      "family": "Material 3",
+      "mode": "dark",
+      "source": "https://github.com/material-foundation/material-color-utilities",
+      "seed": "#3b82f6",
+      "colors": {
+        "background": "#1B1B1F",
+        "surface": "#1B1B1F",
+        "surfaceAlt": "#44474F",
+        "accent": "#ADC6FF",
+        "accentSoft": "#004395",
+        "text": "#E3E2E6",
+        "muted": "#C4C6D0",
+        "positive": "#41DFA5",
+        "negative": "#FFB4AB",
+        "warning": "#FFB782"
+      },
+      "adjustedFrom": {}
+    },
+    {
+      "id": 1,
+      "label": "Sunset",
+      "family": "Material 3",
+      "mode": "dark",
+      "source": "https://github.com/material-foundation/material-color-utilities",
+      "seed": "#f59e0b",
+      "colors": {
+        "background": "#1F1B16",
+        "surface": "#1F1B16",
+        "surfaceAlt": "#504539",
+        "accent": "#FFB95F",
+        "accentSoft": "#653E00",
+        "text": "#EBE1D9",
+        "muted": "#D4C4B5",
+        "positive": "#87DC4D",
+        "negative": "#FFB4AB",
+        "warning": "#FFB95F"
+      },
+      "adjustedFrom": {}
+    },
+    {
+      "id": 2,
+      "label": "Terminal",
+      "family": "Material 3",
+      "mode": "dark",
+      "source": "https://github.com/material-foundation/material-color-utilities",
+      "seed": "#22c55e",
+      "colors": {
+        "background": "#1A1C19",
+        "surface": "#1A1C19",
+        "surfaceAlt": "#414941",
+        "accent": "#4AE176",
+        "accentSoft": "#005321",
+        "text": "#E2E3DD",
+        "muted": "#C1C9BE",
+        "positive": "#4AE176",
+        "negative": "#FFB4AB",
+        "warning": "#F8BD26"
+      },
+      "adjustedFrom": {}
+    },
+    {
+      "id": 3,
+      "label": "Nord",
+      "family": "Nord",
+      "mode": "dark",
+      "source": "https://www.nordtheme.com/docs/colors-and-palettes/",
+      "colors": {
+        "background": "#2E3440",
+        "surface": "#3B4252",
+        "surfaceAlt": "#434C5E",
+        "accent": "#8CC4D4",
+        "accentSoft": "#434C5E",
+        "text": "#ECEFF4",
+        "muted": "#D8DEE9",
+        "positive": "#A8C390",
+        "negative": "#FFA0A7",
+        "warning": "#EBCB8B"
+      },
+      "adjustedFrom": {
+        "accent": "#88c0d0",
+        "positive": "#a3be8c",
+        "negative": "#bf616a"
+      }
+    },
+    {
+      "id": 4,
+      "label": "Dracula",
+      "family": "Dracula",
+      "mode": "dark",
+      "source": "https://github.com/dracula/dracula-theme",
+      "colors": {
+        "background": "#282A36",
+        "surface": "#343746",
+        "surfaceAlt": "#44475A",
+        "accent": "#C7A0FF",
+        "accentSoft": "#44475A",
+        "text": "#F8F8F2",
+        "muted": "#A0B0E6",
+        "positive": "#50FA7B",
+        "negative": "#FF948E",
+        "warning": "#F1FA8C"
+      },
+      "adjustedFrom": {
+        "muted": "#6272a4",
+        "accent": "#bd93f9",
+        "negative": "#ff5555"
+      }
+    },
+    {
+      "id": 5,
+      "label": "Mocha",
+      "family": "Catppuccin",
+      "mode": "dark",
+      "source": "https://catppuccin.com/palette/",
+      "colors": {
+        "background": "#1E1E2E",
+        "surface": "#313244",
+        "surfaceAlt": "#45475A",
+        "accent": "#CBA6F7",
+        "accentSoft": "#45475A",
+        "text": "#CDD6F4",
+        "muted": "#A9B0CB",
+        "positive": "#A6E3A1",
+        "negative": "#F990AD",
+        "warning": "#F9E2AF"
+      },
+      "adjustedFrom": {
+        "muted": "#a6adc8",
+        "negative": "#f38ba8"
+      }
+    },
+    {
+      "id": 6,
+      "label": "Latte",
+      "family": "Catppuccin",
+      "mode": "light",
+      "source": "https://catppuccin.com/palette/",
+      "colors": {
+        "background": "#EFF1F5",
+        "surface": "#E6E9EF",
+        "surfaceAlt": "#CCD0DA",
+        "accent": "#0050CF",
+        "accentSoft": "#CCD0DA",
+        "text": "#4C4F69",
+        "muted": "#575A70",
+        "positive": "#116B00",
+        "negative": "#B7002E",
+        "warning": "#834F00"
+      },
+      "adjustedFrom": {
+        "muted": "#6c6f85",
+        "accent": "#1e66f5",
+        "positive": "#40a02b",
+        "negative": "#d20f39",
+        "warning": "#df8e1d"
+      }
+    },
+    {
+      "id": 7,
+      "label": "Solarized Dark",
+      "family": "Solarized",
+      "mode": "dark",
+      "source": "https://ethanschoonover.com/solarized/",
+      "colors": {
+        "background": "#002B36",
+        "surface": "#073642",
+        "surfaceAlt": "#073642",
+        "accent": "#34A89F",
+        "accentSoft": "#073642",
+        "text": "#EEE8D5",
+        "muted": "#93A1A1",
+        "positive": "#8BA00D",
+        "negative": "#FF6055",
+        "warning": "#BC900D"
+      },
+      "adjustedFrom": {
+        "accent": "#2aa198",
+        "positive": "#859900",
+        "negative": "#dc322f",
+        "warning": "#b58900"
+      }
+    },
+    {
+      "id": 8,
+      "label": "Solarized Light",
+      "family": "Solarized",
+      "mode": "light",
+      "source": "https://ethanschoonover.com/solarized/",
+      "colors": {
+        "background": "#FDF6E3",
+        "surface": "#EEE8D5",
+        "surfaceAlt": "#EEE8D5",
+        "accent": "#006FAF",
+        "accentSoft": "#EEE8D5",
+        "text": "#002B36",
+        "muted": "#576D74",
+        "positive": "#606F00",
+        "negative": "#C92324",
+        "warning": "#876600"
+      },
+      "adjustedFrom": {
+        "muted": "#586e75",
+        "accent": "#268bd2",
+        "positive": "#859900",
+        "negative": "#dc322f",
+        "warning": "#b58900"
+      }
+    },
+    {
+      "id": 9,
+      "label": "Paper",
+      "family": "Material 3",
+      "mode": "light",
+      "source": "https://github.com/material-foundation/material-color-utilities",
+      "seed": "#3b82f6",
+      "colors": {
+        "background": "#FEFBFF",
+        "surface": "#FEFBFF",
+        "surfaceAlt": "#E1E2EC",
+        "accent": "#005AC2",
+        "accentSoft": "#D8E2FF",
+        "text": "#1B1B1F",
+        "muted": "#44474F",
+        "positive": "#006C4B",
+        "negative": "#BA1A1A",
+        "warning": "#934B00"
+      },
+      "adjustedFrom": {}
+    },
+    {
+      "id": 10,
+      "label": "Rose",
+      "family": "Material 3",
+      "mode": "dark",
+      "source": "https://github.com/material-foundation/material-color-utilities",
+      "seed": "#db2777",
+      "colors": {
+        "background": "#201A1B",
+        "surface": "#201A1B",
+        "surfaceAlt": "#514346",
+        "accent": "#FFB1C7",
+        "accentSoft": "#8E0048",
+        "text": "#ECE0E1",
+        "muted": "#D6C2C5",
+        "positive": "#87DC4D",
+        "negative": "#FFB4AB",
+        "warning": "#FFB782"
+      },
+      "adjustedFrom": {}
+    },
+    {
+      "id": 11,
+      "label": "Ocean",
+      "family": "Material 3",
+      "mode": "dark",
+      "source": "https://github.com/material-foundation/material-color-utilities",
+      "seed": "#14b8a6",
+      "colors": {
+        "background": "#191C1B",
+        "surface": "#191C1B",
+        "surfaceAlt": "#3F4946",
+        "accent": "#4FDBC8",
+        "accentSoft": "#005048",
+        "text": "#E0E3E1",
+        "muted": "#BEC9C5",
+        "positive": "#41DFA5",
+        "negative": "#FFB4AB",
+        "warning": "#F8BD26"
+      },
+      "adjustedFrom": {}
+    },
+    {
+      "id": 12,
+      "label": "Lavender",
+      "family": "Material 3",
+      "mode": "light",
+      "source": "https://github.com/material-foundation/material-color-utilities",
+      "seed": "#8b5cf6",
+      "colors": {
+        "background": "#FFFBFF",
+        "surface": "#FFFBFF",
+        "surfaceAlt": "#E7E0EB",
+        "accent": "#6D3BD7",
+        "accentSoft": "#E9DDFF",
+        "text": "#1C1B1E",
+        "muted": "#49454E",
+        "positive": "#006C4B",
+        "negative": "#BA1A1A",
+        "warning": "#934B00"
+      },
+      "adjustedFrom": {}
+    },
+    {
+      "id": 13,
+      "label": "Graphite",
+      "family": "Material 3",
+      "mode": "dark",
+      "source": "https://github.com/material-foundation/material-color-utilities",
+      "seed": "#64748b",
+      "colors": {
+        "background": "#1A1C1E",
+        "surface": "#1A1C1E",
+        "surfaceAlt": "#43474E",
+        "accent": "#A1C9FF",
+        "accentSoft": "#004880",
+        "text": "#E3E2E6",
+        "muted": "#C3C6CF",
+        "positive": "#41DFA5",
+        "negative": "#FFB4AB",
+        "warning": "#FFB782"
+      },
+      "adjustedFrom": {}
+    }
+  ]
+}

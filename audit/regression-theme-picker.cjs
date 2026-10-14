@@ -1,6 +1,6 @@
 // Verify preset selection actually applies the selected profile instead of retaining custom overrides.
 const fs=require('fs'),vm=require('vm'),assert=require('assert').strict;
-const source=fs.readFileSync(require('path').join(__dirname,'../src/webui.h'),'utf8');
+const source=require('./read-webui.cjs')();
 function extract(name){const start=source.search(new RegExp(`^function ${name}\\(`,'m'));assert(start>=0);let end=source.indexOf('{',start)+1,depth=1;while(depth){depth+=(source[end]==='{')-(source[end]==='}');end++;}return source.slice(start,end);}
 class Element {
  constructor(){this.children=[];this.dataset={};this.style={};this.attributes={};this.checked=false;this.value='0';this.listeners={};this.classes=new Set();this.classList={toggle:(name,on)=>on?this.classes.add(name):this.classes.delete(name)};}

@@ -10,7 +10,8 @@ with tempfile.TemporaryDirectory() as folder:
         def Append(self, **kwargs):
             assert kwargs['CPPPATH']==[str(Path(folder)/'generated')]
     args={'Import':lambda name:None,'env':BuildEnv()}
-    runpy.run_path(str(root/'scripts/compress-webui.py'),init_globals=args)
+    module=runpy.run_path(str(root/'scripts/compress-webui.py'),init_globals=args)
+    source=module['expand_webui'](root/'src/webui.h')
     output=Path(folder)/'generated/webui_gzip.h'
     original=output.read_bytes()
     original_mtime=output.stat().st_mtime_ns

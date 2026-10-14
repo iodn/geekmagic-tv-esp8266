@@ -1178,7 +1178,7 @@ input[type="submit"]:disabled,
                     </div>
 
                     <div class="field">
-                        <label>Theme</label>
+                        <label>Device palette</label>
                         <input type="hidden" id="themePreset" value="0">
                         <div class="theme-picker" id="themePicker"></div>
                     </div>
@@ -1256,7 +1256,7 @@ input[type="submit"]:disabled,
                         </div>
 
                         <div id="nightThemePresetWrap" class="field">
-                            <label>Night theme</label>
+                            <label>Night palette</label>
                             <input type="hidden" id="nightThemePreset" value="0">
                             <div class="theme-picker" id="nightThemePicker"></div>
                         </div>
@@ -1897,17 +1897,13 @@ const timezoneOptions = [
     { value: 50400, label: "UTC+14:00" }
 ];
 
-const themeLabels = [
-    { value: 0, label: "Aurora", tones: ["#0F121B", "#1D232F", "#A8C7FA"] },
-    { value: 1, label: "Sunset", tones: ["#21100B", "#3D221A", "#FFB74D"] },
-    { value: 2, label: "Terminal", tones: ["#09120E", "#13241C", "#A5E6AE"] }
-];
+const themeLabels = /*DEVICE_THEME_PRESETS*/ [];
 
 const defaultCustomTheme = {
-    background: "#080F1D",
-    surface: "#122035",
-    accent: "#58DAC1",
-    text: "#F0F7FF"
+    background: themeLabels[0].tones[0],
+    surface: themeLabels[0].tones[1],
+    accent: themeLabels[0].tones[2],
+    text: themeLabels[0].text
 };
 
 const defaultNightCustomTheme = {
@@ -2432,9 +2428,11 @@ function populateThemeButtons(containerId, inputId) {
         button.className = "theme-button";
         button.dataset.targetInput = inputId;
         button.dataset.theme = String(themeData.value);
+        button.title = `${themeData.family} · ${themeData.mode === "dark" ? "Dark" : "Light"}`;
 
         const preview = document.createElement("span");
         preview.className = "theme-preview";
+        preview.setAttribute("aria-hidden", "true");
         (themeData.tones || []).forEach((tone) => {
             const swatch = document.createElement("span");
             swatch.className = "theme-swatch";
@@ -2446,8 +2444,12 @@ function populateThemeButtons(containerId, inputId) {
         label.className = "theme-button-title";
         label.textContent = themeData.label;
 
+        const description = document.createElement("span");
+        description.className = "muted";
+        description.textContent = `${themeData.family} · ${themeData.mode === "dark" ? "Dark" : "Light"}`;
         button.appendChild(preview);
         button.appendChild(label);
+        button.appendChild(description);
         button.addEventListener("click", () => {
             document.getElementById(inputId).value = String(themeData.value);
             if (inputId === "nightThemePreset") {

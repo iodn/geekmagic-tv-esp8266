@@ -2,7 +2,7 @@
 const fs = require('fs');
 const vm = require('vm');
 const assert = require('assert').strict;
-const source = fs.readFileSync(require('path').join(__dirname, '../src/webui.h'), 'utf8');
+const source=require('./read-webui.cjs')();
 for (const script of source.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)) new vm.Script(script[1]);
 function extract(name) {
     const start = source.search(new RegExp(`^(?:async )?function ${name}\\(`, 'm'));
