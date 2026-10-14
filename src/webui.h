@@ -1913,7 +1913,16 @@ const dashboardPageControls = [
 
 let hydrating = false;
 let dirty = false;
+let editGeneration = 0;
+let feedEditGeneration = 0;
 let widgetBaseline = {};
+let operationQueue = Promise.resolve();
+
+function queueOperation(operation) {
+    const pending = operationQueue.then(operation);
+    operationQueue = pending.catch(() => {});
+    return pending;
+}
 let liveTimer = 0;
 let livePromise = Promise.resolve();
 let feedDirty = false;
@@ -2924,6 +2933,7 @@ function scheduleFeedPreview(delay = 180) {
     }
 
     feedDirty = true;
+    feedEditGeneration += 1;
     setSyncState("Feeds pending", "pending");
     window.clearTimeout(feedLiveTimer);
     updateActionButtons();
@@ -2940,6 +2950,7 @@ function scheduleLiveSync(delay = 180) {
     }
 
     dirty = true;
+    editGeneration += 1;
     setSyncState("Pending", "pending");
     window.clearTimeout(liveTimer);
     updateActionButtons();
@@ -2951,33 +2962,39 @@ function scheduleLiveSync(delay = 180) {
 }
 
 async function doLiveSync() {
-    const timezone = getTimezoneFromUI();
-    if (timezone === null) {
-        setSyncState("Timezone", "error");
-        throw new Error("Invalid timezone");
-    }
+    return queueOperation(async () => {
+        const timezone = getTimezoneFromUI();
+        if (timezone === null) {
+            setSyncState("Timezone", "error");
+            throw new Error("Invalid timezone");
+        }
 
-    setSyncState("Preview", "pending");
+        const payload = buildLivePayload();
+        setSyncState("Preview", "pending");
 
-    const response = await postJson("/dashboard/live", buildLivePayload());
+        const response = await postJson("/dashboard/live", payload);
 
-    if (!response.ok) {
-        throw new Error(await response.text());
-    }
+        if (!response.ok) {
+            throw new Error(await response.text());
+        }
 
-    setSyncState("Display draft", "live");
+        setSyncState("Display draft", "live");
+    });
 }
 
 async function doFeedPreview() {
-    setSyncState("Feeds preview", "pending");
+    return queueOperation(async () => {
+        const payload = buildFeedPayload();
+        setSyncState("Feeds preview", "pending");
 
-    const response = await postJson("/feeds/live", buildFeedPayload());
+        const response = await postJson("/feeds/live", payload);
 
-    if (!response.ok) {
-        throw new Error(await response.text());
-    }
+        if (!response.ok) {
+            throw new Error(await response.text());
+        }
 
-    setSyncState("Feeds draft", "live");
+        setSyncState("Feeds draft", "live");
+    });
 }
 
 async function flushLiveSync() {
@@ -3007,20 +3024,24 @@ async function commitState() {
 
     try {
         await flushLiveSync();
-        setSyncState("Saving", "pending");
+        await queueOperation(async () => {
+            setSyncState("Saving", "pending");
 
-        const snapshot = buildWidgetSnapshot();
-        const response = await postJson("/dashboard/save", buildLivePayload());
-        if (!response.ok) {
-            throw new Error(await response.text());
-        }
+            const generation = editGeneration;
+            const snapshot = buildWidgetSnapshot();
+            const payload = buildLivePayload();
+            const response = await postJson("/dashboard/save", payload);
+            if (!response.ok) {
+                throw new Error(await response.text());
+            }
 
-        const appResponse = await request("/app.json");
-        if (appResponse.ok) setDeviceIdentity(await appResponse.json());
-        widgetBaseline = snapshot;
-        dirty = false;
-        updateActionButtons();
-        setSyncState("Saved", "saved");
+            widgetBaseline = snapshot;
+            dirty = editGeneration !== generation;
+            const appResponse = await request("/app.json");
+            if (appResponse.ok) setDeviceIdentity(await appResponse.json());
+            updateActionButtons();
+            setSyncState(dirty ? "Pending" : "Saved", dirty ? "pending" : "saved");
+        });
     } catch (error) {
         console.error(error);
         setSyncState("Save failed", "error");
@@ -3034,17 +3055,21 @@ async function commitFeedConfig() {
 
     try {
         await flushFeedPreview();
-        setSyncState("Saving feeds", "pending");
+        await queueOperation(async () => {
+            setSyncState("Saving feeds", "pending");
 
-        const response = await postJson("/feeds/save", buildFeedPayload());
-        if (!response.ok) {
-            throw new Error(await response.text());
-        }
+            const generation = feedEditGeneration;
+            const payload = buildFeedPayload();
+            const response = await postJson("/feeds/save", payload);
+            if (!response.ok) {
+                throw new Error(await response.text());
+            }
 
-        feedDirty = false;
-        updateActionButtons();
-        setSyncState("Saved", "saved");
-        await loadFeedStateOnly();
+            feedDirty = feedEditGeneration !== generation;
+            updateActionButtons();
+            setSyncState(feedDirty ? "Feeds pending" : "Saved", feedDirty ? "pending" : "saved");
+            if (!feedDirty) await loadFeedStateOnly();
+        });
     } catch (error) {
         console.error(error);
         setSyncState("Feed save failed", "error");
@@ -3059,16 +3084,19 @@ async function discardState() {
     window.clearTimeout(liveTimer);
     liveTimer = 0;
 
+    const generation = editGeneration;
     try {
-        const response = await request("/dashboard/discard", { method: "POST" });
-        if (!response.ok) {
-            throw new Error(await response.text());
-        }
+        await queueOperation(async () => {
+            const response = await request("/dashboard/discard", { method: "POST" });
+            if (!response.ok) {
+                throw new Error(await response.text());
+            }
 
-        dirty = false;
-        updateActionButtons();
-        await loadAllState();
-        setSyncState("Discarded", "saved");
+            dirty = editGeneration !== generation;
+            updateActionButtons();
+            if (!dirty) await loadAllState();
+            setSyncState("Discarded", "saved");
+        });
     } catch (error) {
         console.error(error);
         setSyncState("Discard failed", "error");
@@ -3083,16 +3111,19 @@ async function discardFeedConfig() {
     window.clearTimeout(feedLiveTimer);
     feedLiveTimer = 0;
 
+    const generation = feedEditGeneration;
     try {
-        const response = await request("/feeds/discard", { method: "POST" });
-        if (!response.ok) {
-            throw new Error(await response.text());
-        }
+        await queueOperation(async () => {
+            const response = await request("/feeds/discard", { method: "POST" });
+            if (!response.ok) {
+                throw new Error(await response.text());
+            }
 
-        feedDirty = false;
-        updateActionButtons();
-        await loadFeedStateOnly();
-        setSyncState("Discarded", "saved");
+            feedDirty = feedEditGeneration !== generation;
+            updateActionButtons();
+            if (!feedDirty) await loadFeedStateOnly();
+            setSyncState("Discarded", "saved");
+        });
     } catch (error) {
         console.error(error);
         setSyncState("Discard failed", "error");
@@ -3108,7 +3139,7 @@ async function resetDashboardDefaults() {
     liveTimer = 0;
 
     try {
-        const response = await request("/dashboard/reset", { method: "POST" });
+        const response = await queueOperation(() => request("/dashboard/reset", { method: "POST" }));
         if (!response.ok) {
             throw new Error(await response.text());
         }
@@ -3131,7 +3162,7 @@ async function resetFeedDefaults() {
     feedLiveTimer = 0;
 
     try {
-        const response = await request("/feeds/reset", { method: "POST" });
+        const response = await queueOperation(() => request("/feeds/reset", { method: "POST" }));
         if (!response.ok) {
             throw new Error(await response.text());
         }
