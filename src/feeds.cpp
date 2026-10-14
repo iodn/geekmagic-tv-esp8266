@@ -43,27 +43,15 @@ struct HttpJsonRequestOptions {
     const char *fingerprint;
 };
 
-// Use the actual BearSSL socket context: the public WiFiClientSecure wrapper
-// has no base socket, and abort() would otherwise flush TLS while suspended.
-class FeedTlsClient : public BearSSL::WiFiClientSecureCtx {
+// HTTPClient clones the public wrapper, sharing its underlying TLS context.
+// Abort only the context's TCP socket while the feed worker is suspended.
+class FeedTlsClient : public BearSSL::WiFiClientSecure {
 public:
-    int connect(const char *host, uint16_t port) override {
-        IPAddress address;
-        if (!WiFi.hostByName(host, address)) {
-            logPrintf(F("TLS DNS lookup failed: %s"), host);
-            return 0;
-        }
-        if (!WiFiClient::connect(address, port)) {
-            logPrintf(F("TLS TCP connection failed: %s"), host);
-            return 0;
-        }
-        if (!_connectSSL(host)) {
-            logPrintf(F("TLS handshake failed: %s"), host);
-            return 0;
-        }
-        return 1;
+    void abortTransport() {
+        if (!_owned) return;
+        ClientContext *socket = _owned->*(&FeedTlsClient::_client);
+        if (socket) socket->abort();
     }
-    void abortTransport() { if (_client) _client->abort(); }
 };
 FeedTlsClient *activeTlsClient = nullptr;
 std::unique_ptr<cont_t> feedContinuation;
