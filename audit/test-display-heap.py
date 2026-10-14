@@ -12,6 +12,8 @@ code=r'''
 #define F(x) x
 constexpr int kClockDynamicRegionWidth=216,kClockDynamicRegionHeight=64;
 bool clockDynamicSpriteAllowed=true,clockDynamicSpriteReady=false,clockDynamicSpriteAttempted=false;
+uint32_t clockDynamicSpriteLastAttemptMs=0,now=100;
+uint32_t millis(){return now;}
 struct {uint32_t heap=20000;uint32_t getFreeHeap(){return heap;}} ESP;
 void logPrintf(const char*,...){}
 struct {
@@ -20,7 +22,8 @@ struct {
  void *createSprite(int w,int h){++allocations;assert(w==216 && h==64);return allocationSucceeds?this:nullptr;}
 } clockDynamicSprite;
 '''
-code+=re.search(r'constexpr uint32_t kClockSpriteMinFreeHeapBytes = [^;]+;',source).group(0)
+for constant in ['kClockSpriteMinFreeHeapBytes','kClockSpriteRetryIntervalMs']:
+    code+=re.search(r'constexpr uint32_t '+constant+r' = [^;]+;',source).group(0)
 code+=source[start:end]
 code+=r'''
 int main(){
@@ -30,10 +33,17 @@ int main(){
  assert(!ensureClockDynamicSprite());assert(clockDynamicSprite.allocations==1);
  clockDynamicSpriteAllowed=true;ESP.heap=9000;
  assert(!ensureClockDynamicSprite());assert(clockDynamicSprite.allocations==1);
- // Resource resumption resets the attempt flag before trying again.
- clockDynamicSpriteAttempted=false;ESP.heap=20000;clockDynamicSprite.allocationSucceeds=false;
+ ESP.heap=20000;clockDynamicSprite.allocationSucceeds=false;
+ now+=4999;assert(!ensureClockDynamicSprite());assert(clockDynamicSprite.allocations==1);
+ now++;
  assert(!ensureClockDynamicSprite());assert(clockDynamicSprite.allocations==2);
  assert(!ensureClockDynamicSprite());assert(clockDynamicSprite.allocations==2);
+ now+=5000;clockDynamicSprite.allocationSucceeds=true;
+ assert(ensureClockDynamicSprite());assert(clockDynamicSprite.allocations==3);
+ // Retry timing must also work across the 32-bit millis wrap.
+ clockDynamicSpriteReady=false;clockDynamicSpriteLastAttemptMs=0xfffff800U;
+ now=clockDynamicSpriteLastAttemptMs+4999U;assert(!ensureClockDynamicSprite());
+ now++;assert(ensureClockDynamicSprite());assert(clockDynamicSprite.allocations==4);
  assert(kClockSpriteMinFreeHeapBytes-1744>=8000);
 }
 '''

@@ -43,6 +43,7 @@ constexpr int kClockFooterY = 148;
 constexpr int kClockFooterHeight = 78;
 // The 1 bpp buffer takes about 1.7 KB; keep at least 8 KB for request handling.
 constexpr uint32_t kClockSpriteMinFreeHeapBytes = 10000UL;
+constexpr uint32_t kClockSpriteRetryIntervalMs = 5000UL;
 constexpr uint8_t kPageTransitionFadeDownSteps = 2;
 constexpr uint8_t kPageTransitionFadeUpSteps = 3;
 constexpr uint16_t kPageTransitionFadeStepDelayMs = 12;
@@ -148,6 +149,7 @@ struct ClockMetaCache {
 ClockMetaCache clockMetaCache = {false, {0}};
 bool clockDynamicSpriteReady = false;
 bool clockDynamicSpriteAttempted = false;
+uint32_t clockDynamicSpriteLastAttemptMs = 0;
 bool clockDynamicSpriteAllowed = false;
 bool resumeClockSpriteAfterDynamicSuspend = false;
 uint8_t dynamicResourceSuspendDepth = 0;
@@ -1366,11 +1368,14 @@ bool ensureClockDynamicSprite() {
         return true;
     }
 
-    if (clockDynamicSpriteAttempted) {
+    uint32_t now = millis();
+    if (clockDynamicSpriteAttempted &&
+        now - clockDynamicSpriteLastAttemptMs < kClockSpriteRetryIntervalMs) {
         return false;
     }
 
     clockDynamicSpriteAttempted = true;
+    clockDynamicSpriteLastAttemptMs = now;
     uint32_t freeHeap = ESP.getFreeHeap();
     if (freeHeap < kClockSpriteMinFreeHeapBytes) {
         logPrintf(F("Clock sprite skipped, free heap too low: %u"), freeHeap);
