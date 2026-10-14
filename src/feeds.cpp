@@ -1001,6 +1001,14 @@ bool httpGetJson(const String &url,
             } else {
                 logPrintf(F("%s GET failed: %d (%s)"), transportLabel, responseCode, "feed request");
             }
+            if (responseCode < 0 && activeTlsClient != nullptr) {
+                char tlsMessage[80] = {};
+                int tlsError = activeTlsClient->getLastSSLError(tlsMessage, sizeof(tlsMessage));
+                logPrintf(F("TLS error: %d %s"), tlsError, tlsMessage);
+                if (tlsError != 0 && error != nullptr) {
+                    *error = String(F("TLS ")) + String(tlsError) + " " + tlsMessage;
+                }
+            }
             http.end();
             return false;
         }
