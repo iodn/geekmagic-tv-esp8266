@@ -363,6 +363,9 @@ Protected image endpoints:
 | POST | `/delete` | Delete uploaded image |
 
 Image paths must stay under `/image/` and use `.jpg` or `.jpeg`.
+Use a 240x240 baseline JPEG for the sharpest result. Larger images are reduced
+using the decoder's 1/2, 1/4 or 1/8 scale; any remaining overflow is cropped.
+Smaller images retain their size and have black margins.
 
 Protected network and system endpoints:
 

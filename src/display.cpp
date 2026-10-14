@@ -331,8 +331,9 @@ void hashThemeConfig(uint32_t &hash) {
 }
 
 bool tftOutput(int16_t x, int16_t y, uint16_t width, uint16_t height, uint16_t *bitmap) {
-    if (y >= tft.height()) {
-        return false;
+    yield();
+    if (x >= tft.width() || y >= tft.height()) {
+        return true;
     }
 
     tft.pushImage(x, y, width, height, bitmap);
@@ -2570,10 +2571,35 @@ bool displayRenderImage(const char *path) {
         return false;
     }
 
+    uint16_t width = 0;
+    uint16_t height = 0;
+    JRESULT headerResult = TJpgDec.getFsJpgSize(&width, &height, path, LittleFS);
+    if (headerResult != JDR_OK || width == 0 || height == 0) {
+        jpgFile.close();
+        displayShowMessage(String(F("JPEG header error\n")) + String(headerResult));
+        return false;
+    }
+    uint8_t scale = 1;
+    while (scale < 8 && ((width + scale - 1) / scale > DISPLAY_WIDTH ||
+                         (height + scale - 1) / scale > DISPLAY_HEIGHT)) {
+        scale *= 2;
+    }
+    int renderedWidth = min(static_cast<int>((width + scale - 1) / scale), DISPLAY_WIDTH);
+    int renderedHeight = min(static_cast<int>((height + scale - 1) / scale), DISPLAY_HEIGHT);
+    TJpgDec.setJpgScale(scale);
+
     tft.startWrite();
+    // Clear only uncovered margins so smaller images cannot retain the previous page.
+    if (renderedWidth < DISPLAY_WIDTH) {
+        tft.fillRect(renderedWidth, 0, DISPLAY_WIDTH - renderedWidth, DISPLAY_HEIGHT, TFT_BLACK);
+    }
+    if (renderedHeight < DISPLAY_HEIGHT) {
+        tft.fillRect(0, renderedHeight, renderedWidth, DISPLAY_HEIGHT - renderedHeight, TFT_BLACK);
+    }
     JRESULT result = TJpgDec.drawFsJpg(0, 0, jpgFile);
     tft.endWrite();
     jpgFile.close();
+    TJpgDec.setJpgScale(1);
 
     if (result != JDR_OK) {
         displayShowMessage(String(F("JPEG error\n")) + String(result));

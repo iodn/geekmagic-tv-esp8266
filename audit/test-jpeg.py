@@ -21,6 +21,12 @@ while depth:
     depth += (source[end] == "{") - (source[end] == "}")
     end += 1
 validator = source[match.start():end]
+def extract(name):
+    match=re.search(r'^bool '+name+r'\([^;{]*\)\s*\{',source,re.M);assert match,name
+    brace=source.index('{',match.start());end=brace+1;depth=1
+    while depth:
+        depth+=(source[end]=='{')-(source[end]=='}');end+=1
+    return source[match.start():end]
 
 with tempfile.TemporaryDirectory() as folder:
     tmp = Path(folder)
@@ -65,7 +71,19 @@ struct FS {
 } LittleFS;
 int yields=0,drawnBlocks=0,decodedBlocks=0;
 void yield(){++yields;}
-bool tftOutput(int16_t,int16_t,uint16_t,uint16_t,uint16_t *){++drawnBlocks;return true;}
+#define F(x) x
+using std::min;
+constexpr int DISPLAY_WIDTH=240,DISPLAY_HEIGHT=240,TFT_BLACK=0;
+class String:public std::string {public:using std::string::string;String(const std::string&s):std::string(s){}String(int v):std::string(std::to_string(v)){} };
+int maxRight=0,maxBottom=0,margins=0,messages=0;
+struct {
+ int width(){return 240;}int height(){return 240;}
+ void startWrite(){}void endWrite(){}
+ void fillRect(int,int,int,int,uint16_t){++margins;}
+ void pushImage(int x,int y,uint16_t w,uint16_t h,uint16_t*){++drawnBlocks;maxRight=std::max(maxRight,x+w);maxBottom=std::max(maxBottom,y+h);}
+} tft;
+void displayShowMessage(const String&){++messages;}
+bool tftOutput(int16_t,int16_t,uint16_t,uint16_t,uint16_t *);
 using Callback=bool (*)(int16_t,int16_t,uint16_t,uint16_t,uint16_t *);
 struct Input {
  File file;Callback callback;
@@ -82,23 +100,28 @@ static int output(JDEC *decoder,void *bitmap,JRECT *rectangle){
                        rectangle->bottom-rectangle->top+1,static_cast<uint16_t *>(bitmap));
 }
 struct Decoder {
- Callback callback=tftOutput;uint16_t lastWidth=0,lastHeight=0;int calls=0;
+ Callback callback=tftOutput;uint16_t lastWidth=0,lastHeight=0;int calls=0,scaleShift=0,scale=1;
+ void setJpgScale(int value){scale=value;scaleShift=0;while(value>1){value>>=1;scaleShift++;}}
  void setCallback(Callback value){callback=value;}
- JRESULT process(const char *path,FS &fs,bool decode){
-  ++calls;Input state{fs.open(path,"r"),callback};if(!state.file)return JDR_INP;
+ JRESULT processFile(File file,bool decode){
+  ++calls;Input state{file,callback};if(!state.file)return JDR_INP;
   // 64-bit host pointers enlarge table metadata relative to the 32-bit MCU.
   alignas(void *) uint8_t workspace[TJPGD_WORKSPACE_SIZE * 2];
   JDEC decoder{};JRESULT result=jd_prepare(&decoder,input,workspace,sizeof workspace,&state);
   if(result!=JDR_OK)return result;
   lastWidth=decoder.width;lastHeight=decoder.height;
-  return decode ? jd_decomp(&decoder,output,0) : result;
+  return decode ? jd_decomp(&decoder,output,scaleShift) : result;
  }
+ JRESULT process(const char *path,FS &fs,bool decode){return processFile(fs.open(path,"r"),decode);}
+ JRESULT drawFsJpg(int,int,File file){return processFile(file,true);}
  JRESULT getFsJpgSize(uint16_t *width,uint16_t *height,const char *path,FS &fs){
   JRESULT result=process(path,fs,false);*width=lastWidth;*height=lastHeight;return result;}
  JRESULT drawFsJpg(int,int,const char *path,FS &fs){return process(path,fs,true);}
 } TJpgDec;
 '''
+    code += extract("tftOutput") + "\n"
     code += validator + "\n"
+    code += extract("displayRenderImage") + "\n"
     code += r'''
 int main(int argc,char **argv){
  assert(argc==2);std::string directory=argv[1];
@@ -123,6 +146,12 @@ int main(int argc,char **argv){
  TJpgDec.setCallback([](int16_t,int16_t,uint16_t,uint16_t,uint16_t *){return true;});
  (void)TJpgDec.process(path("missing-eoi.jpg").c_str(),LittleFS,true);
  TJpgDec.setCallback(tftOutput);
+ drawnBlocks=0;maxRight=0;maxBottom=0;margins=0;
+ assert(displayRenderImage(path("large.jpg").c_str()));assert(messages==0);
+ assert(drawnBlocks>0 && maxRight==160 && maxBottom==128 && margins==2 && TJpgDec.scale==1);
+ drawnBlocks=0;maxRight=0;maxBottom=0;margins=0;
+ assert(displayRenderImage(path("small.jpg").c_str()));
+ assert(drawnBlocks>0 && maxRight==32 && maxBottom==24 && margins==2 && TJpgDec.scale==1);
  std::cout<<"Real JPEG regressions passed: baseline/dimensions, complete decode, truncated entropy, SOI/EOI/header rejection, no drawing, callback restoration\n";
 }
 '''
