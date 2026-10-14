@@ -420,7 +420,7 @@ void setup() {
 
     logPrint(F("SmartClock Starting..."));
 
-    logPrintf(F("Firmware Version: %d"), FIRMWARE_VERSION);
+    logPrintf(F("Firmware Version: %s (settings schema %d)"), FIRMWARE_VERSION_STRING, FIRMWARE_VERSION);
 
     const rst_info* resetInfo = ESP.getResetInfoPtr();
     uint8_t resetReason = resetInfo ? resetInfo->reason : 0xFF;

@@ -4,14 +4,14 @@
 #include <Arduino.h>
 #include <EEPROM.h>
 
-// Firmware version - increment when Settings structure changes
+// EEPROM layout version - increment when Settings structure changes
 #define FIRMWARE_VERSION 3
 #define SETTINGS_DEVICE_NAME_LENGTH 32
 #define SETTINGS_HOSTNAME_LENGTH 32
 
-// Semantic version string (replaced by GitHub Action during release builds)
+// Semantic firmware release version
 #ifndef FIRMWARE_VERSION_STRING
-#define FIRMWARE_VERSION_STRING "dev"
+#define FIRMWARE_VERSION_STRING "2.3.0"
 #endif
 
 struct Settings {
