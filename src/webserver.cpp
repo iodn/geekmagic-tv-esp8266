@@ -1088,6 +1088,10 @@ void handleApiUpdate() {
         return;
     }
 
+    if (!doc["line1"].isNull() && !doc["line1"].is<const char*>()) {
+        sendTextResponse(400, "line1 must be a string");
+        return;
+    }
     if (!doc["line1"].isNull()) {
         strncpy(displayState.line2, doc["line1"].as<const char*>(), sizeof(displayState.line2) - 1);
         displayState.line2[sizeof(displayState.line2) - 1] = '\0';
