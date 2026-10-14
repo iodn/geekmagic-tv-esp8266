@@ -1,0 +1,30 @@
+Firmware release v2.3.0 — 2026-10-14
+
+Source: 34911eb, chore: bump firmware release version to 2.3.0.
+Semantic version is 2.3.0 in src/settings.h and .bumpversion.toml.
+The EEPROM layout version remains 3; no settings migration is needed.
+Startup now reports the semantic release version and settings schema separately.
+Future bumpversion substitutions use the current version rather than hardcoded dev.
+
+pio run: PASS.
+Static RAM: 50,988 bytes (62.2%); flash: 739,683 bytes (70.8%).
+Settings regressions: PASS. Deterministic gzip web-asset checks: PASS.
+git diff --check: PASS.
+
+Local firmware:
+.pio/build/nodemcuv2/firmware.bin
+.pio/build/nodemcuv2/geekmagic-tv-esp8266-v2.3.0.bin (identical versioned copy)
+Size: 743,840 bytes. SHA256:
+1b63887b60c5bae3b344c6edffa8ea22b0a071ebdef7270101ff86179a0a02f8
+
+Binaries are ignored build artifacts. The Git push publishes source and the
+version tag; it does not upload a binary or create a GitHub Release.
+
+Native verification: PASS. Application-only flash hash verified; saved settings
+validate. A completed 45-second boot capture reports firmware 2.3.0 and schema 3.
+WiFi reconnects, time/mDNS/OTA start, weather and BTC/MSFT/NVDA synchronize,
+and the drawing buffer is restored. Boot stability is confirmed at 34.413 s:
+DRAM free 18,320 bytes, largest block 17,424, fragmentation 5%; IRAM 18,824.
+One boot, no exception, watchdog reset or feed failure during the capture.
+Private logs: write-v2.3.0.log and v2.3.0-boot.log under
+/home/intra/.local/state/geekmagic-backups/.
