@@ -33,6 +33,7 @@ bool mdnsStarted = false;
 bool otaStarted = false;
 unsigned long bootCompletedAt = 0;
 unsigned long lastOptionalServiceLogAt = 0;
+unsigned long lastMdnsStartAttempt = 0;
 
 constexpr uint32_t kBootSuccessConfirmMs = 30000UL;
 constexpr uint32_t kClockSpriteWarmupMs = 8000UL;
@@ -425,13 +426,13 @@ void monitorWiFi() {
     }
 }
 
-void setupMDNS() {
+bool setupMDNS() {
     char hostname[SETTINGS_HOSTNAME_LENGTH];
     snprintf(hostname, sizeof(hostname), "%s", WiFi.hostname().c_str());
 
     if (!MDNS.begin(hostname)) {
         Serial.println(F("mDNS failed"));
-        return;
+        return false;
     }
 
     MDNS.addService("http", "tcp", WEB_SERVER_PORT);
@@ -441,6 +442,7 @@ void setupMDNS() {
     MDNS.addServiceTxt("http", "tcp", "name", appSettings.deviceName);
 
     Serial.printf("mDNS started: %s.local\n", hostname);
+    return true;
 }
 
 void setupOTA() {
@@ -515,8 +517,11 @@ void startDeferredNetworkServices() {
             return;
         }
 
-        setupMDNS();
-        mdnsStarted = true;
+        if (lastMdnsStartAttempt != 0 && millis() - lastMdnsStartAttempt < 5000UL) {
+            return;
+        }
+        lastMdnsStartAttempt = millis();
+        mdnsStarted = setupMDNS();
         logHeapState("mDNS init");
         return;
     }
