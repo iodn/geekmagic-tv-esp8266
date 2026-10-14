@@ -1,0 +1,45 @@
+USB hardware baseline — 2026-10-14
+
+The user connected the TV over USB. PlatformIO identifies /dev/ttyUSB0 as a
+USB serial adapter with VID:PID 1A86:7523. Serial output at 115200 baud includes
+an external-reset boot followed by successful firmware initialization. Credential
+log lines were redacted during capture. The boot counter was 1; the power-cycle
+counter was reset after startup. No factory reset or flash erase was performed.
+
+Observed installed-firmware behavior
+
+* Settings load and CRC validation succeed.
+* Display initializes, then applies 70 percent brightness.
+* LittleFS, authentication, dashboard and feed initialization complete.
+* The station connects using its saved WiFi credentials and acquires an IP.
+* Free heap after display initialization: 24,504 bytes.
+* Free heap after filesystem/auth/dashboard/feed initialization: 24,288 bytes.
+* Free heap after WiFi setup: 23,144 bytes.
+* Free heap after webserver initialization and first render: 18,920 bytes.
+* mDNS is repeatedly deferred at 18,920 and 18,416 bytes free.
+
+The installed firmware runs the older blocking WiFi setup/retry implementation;
+it does not include the currently committed local fixes. The serial line
+"Firmware Version: 3" refers to the settings format version, not a verified
+semantic release identifier. These baseline observations do not validate the
+new firmware's heap gates, network worker, drawing changes or HTTP endpoints.
+
+HTTP access and local build
+
+The TV acquires an address in 192.168.16.0/24. This computer is connected through
+192.168.64.0/24, and HTTP connection attempts to the TV fail immediately. Thus
+HTTP/API tests cannot yet run from this computer. WiFi association and IP
+acquisition on the TV itself are confirmed by its serial output.
+
+The local firmware image passes esptool image_info checksum validation and has
+an ESP8266 4 MB / 40 MHz / DIO image header. Its SHA256 is:
+fe0893f544b8228d5fb848ec8ea40c0e8be5cbf282768ef6a39e874dc8dc8d31
+
+Pending work
+
+Approval was requested before replacing the installed firmware. If authorized,
+back up the current flash privately, update only the firmware, and collect a new
+boot/heap/service baseline. Inspect reset stability and native continuation
+behavior. Arrange reachable HTTP access for authenticated API/feed tests. Physical
+screen observations remain needed to confirm actual flicker and visual layouts.
+No local firmware has been flashed, and nothing has been pushed to GitHub.
