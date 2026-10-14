@@ -126,6 +126,15 @@ struct Decoder {
 } TJpgDec;
 '''
 code += function("displayValidateImage") + "\n"
+code += r'''
+#define F(x) x
+bool backlightOn=false,nightActive=true;
+int savedBrightness=70,appliedBrightness=0;
+int dashboardEffectiveBrightness(int day){return nightActive?14:day;}
+void displayApplyBrightness(int level){appliedBrightness=level;backlightOn=level>0;}
+void logPrintf(const char*,...){}void logPrint(const char*){}
+'''
+code += function("displayToggleBacklight") + "\n"
 code += function("focusProgressWidth") + "\n"
 code += function("formatDuration") + "\n"
 code += r'''
@@ -138,6 +147,10 @@ focus_case = re.search(r"case DASHBOARD_PAGE_FOCUS: \{[\s\S]*?\n        \}", sou
 code += "uint32_t focusHash(){uint32_t hash=2166136261UL;switch(0){" + focus_case.replace("DASHBOARD_PAGE_FOCUS", "0") + "}return hash;}\n"
 code += r'''
 int main(){
+ displayToggleBacklight();assert(backlightOn && appliedBrightness==14);
+ displayToggleBacklight();assert(!backlightOn && appliedBrightness==0);
+ nightActive=false;displayToggleBacklight();assert(appliedBrightness==70);
+ displayToggleBacklight();savedBrightness=0;displayToggleBacklight();assert(appliedBrightness==100);
  assert(!displayValidateImage(nullptr));assert(TJpgDec.drawCalls==0);
  LittleFS.present=false;assert(!displayValidateImage("test.jpg"));LittleFS.present=true;
  std::string validJpeg=LittleFS.file.bytes;

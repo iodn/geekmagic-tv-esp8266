@@ -2639,7 +2639,8 @@ void displayToggleBacklight() {
         logPrint(F("Backlight OFF"));
         displayApplyBrightness(0);
     } else {
-        logPrintf(F("Backlight ON (brightness: %d)"), savedBrightness);
-        displayApplyBrightness(savedBrightness > 0 ? savedBrightness : 100);
+        int resumeBrightness = dashboardEffectiveBrightness(savedBrightness > 0 ? savedBrightness : 100);
+        logPrintf(F("Backlight ON (brightness: %d)"), resumeBrightness);
+        displayApplyBrightness(resumeBrightness);
     }
 }
