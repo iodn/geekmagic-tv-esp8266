@@ -2987,7 +2987,7 @@ async function doFeedPreview() {
         const payload = buildFeedPayload();
         setSyncState("Feeds preview", "pending");
 
-        const response = await postJson("/feeds/live", payload);
+        const response = await postFeedConfig("/feeds/live", payload);
 
         if (!response.ok) {
             throw new Error(await response.text());
@@ -3060,7 +3060,7 @@ async function commitFeedConfig() {
 
             const generation = feedEditGeneration;
             const payload = buildFeedPayload();
-            const response = await postJson("/feeds/save", payload);
+            const response = await postFeedConfig("/feeds/save", payload);
             if (!response.ok) {
                 throw new Error(await response.text());
             }
@@ -3208,6 +3208,24 @@ function renderWeatherResults(results) {
     });
 }
 
+async function waitQueuedResponse(response, pollUrl) {
+    while (response.status === 202) {
+        await new Promise((resolve) => window.setTimeout(resolve, 300));
+        response = await request(pollUrl);
+    }
+    return response;
+}
+
+async function postFeedConfig(url, payload) {
+    let response = await postJson(url, payload);
+    if (response.status === 409) {
+        const idle = await waitQueuedResponse(await request("/feeds/job"), "/feeds/job");
+        if (!idle.ok) throw new Error(await idle.text());
+        response = await postJson(url, payload);
+    }
+    return response;
+}
+
 async function searchWeatherLocations() {
     const query = document.getElementById("weatherQuery").value.trim();
     if (query.length < 2) {
@@ -3220,7 +3238,8 @@ async function searchWeatherLocations() {
     document.getElementById("weatherResults").innerHTML = "";
 
     try {
-        const response = await request(`/feeds/search?query=${encodeURIComponent(query)}`);
+        const response = await waitQueuedResponse(
+            await request(`/feeds/search?query=${encodeURIComponent(query)}`), "/feeds/search");
         if (!response.ok) {
             const message = (await response.text()).trim();
             throw new Error(message || "Search failed");
@@ -3241,14 +3260,19 @@ async function syncFeeds(scope = "all") {
     try {
         await flushFeedPreview();
         setSyncState("Syncing feeds", "pending");
-        const response = await request(`/feeds/sync?scope=${encodeURIComponent(scope)}`, { method: "POST" });
+        const generation = feedEditGeneration;
+        const response = await waitQueuedResponse(
+            await request(`/feeds/sync?scope=${encodeURIComponent(scope)}`, { method: "POST" }), "/feeds/job");
         if (!response.ok) {
             const message = (await response.text()).trim();
             throw new Error(message || "Feed sync failed");
         }
         const feedState = await response.json();
-        applyFeedState(feedState);
-        feedDirty = Boolean(feedState.meta?.hasDraft);
+        if (generation === feedEditGeneration) {
+            applyFeedState(feedState);
+            feedDirty = Boolean(feedState.meta?.hasDraft);
+        }
+        if (feedState.meta?.lastSyncSuccess === false) throw new Error(feedState.meta.lastSyncError || "Feed sync failed");
         updateActionButtons();
         setSyncState(feedDirty ? "Feeds synced, draft open" : "Feeds synced", feedDirty ? "live" : "saved");
     } catch (error) {
@@ -3375,7 +3399,8 @@ function scanWiFi() {
     const scanStatus = document.getElementById("scanStatus");
     scanStatus.textContent = "Scanning…";
 
-    request("/scan")
+    request("/scan?start=1")
+        .then((response) => waitQueuedResponse(response, "/scan"))
         .then((response) => {
             if (!response.ok) {
                 throw new Error("Scan failed");

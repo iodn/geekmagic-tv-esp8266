@@ -24,6 +24,7 @@ char currentImage[DISPLAY_PATH_BUFFER_SIZE];
 
 extern Settings appSettings;
 extern bool otaStarted;
+extern void trackWiFiReconnectAttempt(bool active);
 
 File uploadFile;
 
@@ -37,6 +38,9 @@ bool factoryResetPending = false;
 bool wifiReconfigurePending = false;
 bool rebootPending = false;
 unsigned long rebootRequestedAtMs = 0;
+bool wifiScanStarted = false;
+bool otaUploadComplete = false;
+String otaUploadError;
 String uploadErrorMessage;
 int uploadStatusCode = 200;
 char uploadTargetPath[DISPLAY_PATH_BUFFER_SIZE] = {0};
@@ -575,13 +579,11 @@ void startQueuedWiFiConnect() {
     copyString(wifiConnectTask.previousSsid, sizeof(wifiConnectTask.previousSsid), WiFi.SSID().c_str());
     copyString(wifiConnectTask.previousPassword, sizeof(wifiConnectTask.previousPassword), WiFi.psk().c_str());
     wifiConnectTask.previousPersistent = WiFi.getPersistent();
+    trackWiFiReconnectAttempt(false);
     WiFi.persistent(false);
     WiFi.setAutoReconnect(true);
-    delay(100);
-
     WiFi.mode(WIFI_AP_STA);
     WiFi.softAP(WIFI_AP_NAME, apPassword.c_str());
-    delay(100);
     char hostname[SETTINGS_HOSTNAME_LENGTH];
     copyConfiguredHostname(hostname, sizeof(hostname));
     WiFi.hostname(hostname);
@@ -601,6 +603,7 @@ void failWiFiConnectTask(const __FlashStringHelper *reason) {
         // Clear only the failed candidate in RAM; persisted credentials are untouched.
         WiFi.disconnect(false, true);
     }
+    trackWiFiReconnectAttempt(wifiConnectTask.previousSsid[0] != '\0');
     WiFi.persistent(wifiConnectTask.previousPersistent);
     memset(wifiConnectTask.password, 0, sizeof(wifiConnectTask.password));
     memset(wifiConnectTask.previousPassword, 0, sizeof(wifiConnectTask.previousPassword));
@@ -629,8 +632,7 @@ void processWiFiConnectTask() {
             memset(wifiConnectTask.password, 0, sizeof(wifiConnectTask.password));
             memset(wifiConnectTask.previousPassword, 0, sizeof(wifiConnectTask.previousPassword));
             displayShowMessage("WiFi OK\n" + WiFi.localIP().toString());
-            delay(1200);
-            ESP.restart();
+            queueRestart();
             return;
         }
 
@@ -933,6 +935,10 @@ void handleDashboardDiscard() {
 }
 
 void handleFeedsLive() {
+    if (feedsBusy() || webserverHasPendingNetworkAction()) {
+        sendTextResponse(409, "Another network request is already running");
+        return;
+    }
     JsonDocument doc;
     String error;
     if (!parseJsonBody(doc, &error)) {
@@ -950,6 +956,10 @@ void handleFeedsLive() {
 }
 
 void handleFeedsSave() {
+    if (feedsBusy() || webserverHasPendingNetworkAction()) {
+        sendTextResponse(409, "Another network request is already running");
+        return;
+    }
     String error;
     if (server.hasArg("plain")) {
         JsonDocument doc;
@@ -971,12 +981,20 @@ void handleFeedsSave() {
 }
 
 void handleFeedsDiscard() {
+    if (feedsBusy() || webserverHasPendingNetworkAction()) {
+        sendTextResponse(409, "Another network request is already running");
+        return;
+    }
     feedsDiscardDraftChanges();
     displayUpdate();
     sendTextResponse(200, "OK");
 }
 
 void handleFeedsReset() {
+    if (feedsBusy() || webserverHasPendingNetworkAction()) {
+        sendTextResponse(409, "Another network request is already running");
+        return;
+    }
     feedsResetToDefaults();
     if (!feedsSaveConfig()) {
         sendTextResponse(500, "Failed to reset feed config");
@@ -988,40 +1006,53 @@ void handleFeedsReset() {
 }
 
 void handleFeedsSync() {
+    if (feedsBusy() || webserverHasPendingNetworkAction()) {
+        sendTextResponse(409, "Another network request is already running");
+        return;
+    }
     String scope = server.hasArg("scope") ? server.arg("scope") : "all";
     String error;
     if (!feedsSyncNow(scope.c_str(), &error)) {
-        sendTextResponse(502, error.length() > 0 ? error : "Feed sync failed");
+        sendTextResponse(400, error.length() > 0 ? error : "Feed sync rejected");
         return;
     }
+    sendJsonResponse(202, "{\"queued\":true}");
+}
 
-    displayUpdate();
+void handleFeedJob() {
+    if (feedsBusy()) {
+        sendJsonResponse(202, "{\"pending\":true}");
+        return;
+    }
     String json;
     feedsBuildStateJson(json);
     sendJsonResponse(200, json);
 }
 
 void handleFeedSearch() {
-    if (!server.hasArg("query")) {
-        sendTextResponse(400, "Missing query parameter");
-        return;
-    }
-
-    String query = server.arg("query");
-    query.trim();
-    if (query.length() < 2) {
-        sendTextResponse(400, "Enter at least 2 characters");
-        return;
-    }
-
-    String json;
     String error;
-    if (!feedsSearchWeatherLocations(query, json, &error)) {
-        sendTextResponse(502, error.length() > 0 ? error : "Search failed");
+    if (server.hasArg("query")) {
+        if (feedsBusy() || webserverHasPendingNetworkAction()) {
+            sendTextResponse(409, "Another network request is already running");
+            return;
+        }
+        if (!feedsQueueWeatherSearch(server.arg("query"), &error)) {
+            sendTextResponse(400, error);
+            return;
+        }
+        sendJsonResponse(202, "{\"pending\":true}");
         return;
     }
-
-    sendJsonResponse(200, json);
+    String json;
+    FeedSearchStatus status = feedsWeatherSearchResult(json, &error);
+    if (status == FEED_SEARCH_PENDING) {
+        sendJsonResponse(202, "{\"pending\":true}");
+    } else if (status == FEED_SEARCH_READY) {
+        sendJsonResponse(200, json);
+    } else {
+        sendTextResponse(status == FEED_SEARCH_IDLE ? 409 : 502,
+                         error.length() > 0 ? error : "No search queued");
+    }
 }
 
 void handleFileUpload() {
@@ -1223,17 +1254,30 @@ void handleOTAUpload() {
     HTTPUpload &upload = server.upload();
 
     if (upload.status == UPLOAD_FILE_START) {
+        otaUploadComplete = false;
+        otaUploadError = "";
+        if (feedsBusy() || webserverHasPendingNetworkAction()) {
+            otaUploadError = "Another network request is running";
+            return;
+        }
         displayShowMessage("OTA Update...");
         uint32_t maxSketchSpace = (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000;
         if (!Update.begin(maxSketchSpace)) {
+            otaUploadError = "Firmware update could not start";
             Update.printError(Serial);
         }
-    } else if (upload.status == UPLOAD_FILE_WRITE) {
+    } else if (upload.status == UPLOAD_FILE_WRITE && otaUploadError.isEmpty()) {
         if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
+            otaUploadError = "Incomplete firmware write";
             Update.printError(Serial);
         }
-    } else if (upload.status == UPLOAD_FILE_END) {
+    } else if (upload.status == UPLOAD_FILE_ABORTED) {
+        otaUploadComplete = false;
+        otaUploadError = "Firmware upload aborted";
+        if (Update.isRunning()) Update.end();
+    } else if (upload.status == UPLOAD_FILE_END && otaUploadError.isEmpty()) {
         if (Update.end(true)) {
+            otaUploadComplete = true;
             displayShowMessage("OTA complete");
         } else {
             Update.printError(Serial);
@@ -1243,12 +1287,16 @@ void handleOTAUpload() {
 }
 
 void handleOTADone() {
-    bool shouldReboot = !Update.hasError();
-    sendTextResponse(200, shouldReboot ? "OK - Rebooting..." : "FAIL");
+    if (!otaUploadComplete && Update.isRunning()) {
+        Update.end();
+    }
+    bool shouldReboot = otaUploadComplete && !Update.hasError() && otaUploadError.isEmpty();
+    sendTextResponse(shouldReboot ? 200 : 409,
+                     shouldReboot ? "OK - Rebooting..." :
+                     (otaUploadError.length() ? otaUploadError : String("Incomplete firmware upload")));
 
     if (shouldReboot) {
-        delay(1000);
-        ESP.restart();
+        queueRestart();
     }
 }
 
@@ -1257,7 +1305,33 @@ void handleLog() {
 }
 
 void handleWiFiScan() {
-    int networkCount = WiFi.scanNetworks(false, true);
+    if (server.hasArg("start") && server.arg("start") == "1") {
+        if (webserverHasPendingNetworkAction() || feedsBusy()) {
+            sendTextResponse(409, "Another network task is running");
+            return;
+        }
+        WiFi.scanDelete();
+        int result = WiFi.scanNetworks(true, true);
+        if (result == WIFI_SCAN_FAILED) {
+            sendTextResponse(502, "WiFi scan could not start");
+            return;
+        }
+        wifiScanStarted = true;
+    }
+    if (!wifiScanStarted) {
+        sendTextResponse(409, "No scan queued");
+        return;
+    }
+    int networkCount = WiFi.scanComplete();
+    if (networkCount == WIFI_SCAN_RUNNING) {
+        sendJsonResponse(202, "{\"pending\":true}");
+        return;
+    }
+    if (networkCount < 0) {
+        wifiScanStarted = false;
+        sendTextResponse(502, "WiFi scan failed");
+        return;
+    }
     JsonDocument doc;
     JsonArray networks = doc.to<JsonArray>();
     for (int index = 0; index < networkCount; ++index) {
@@ -1266,11 +1340,15 @@ void handleWiFiScan() {
         network["rssi"] = WiFi.RSSI(index);
         network["encryption"] = WiFi.encryptionType(index);
     }
-
     String json;
-    serializeJson(doc, json);
+    if (doc.overflowed()) {
+        sendTextResponse(503, "Scan results exceed available memory");
+    } else {
+        serializeJson(doc, json);
+        sendJsonResponse(200, json);
+    }
     WiFi.scanDelete();
-    sendJsonResponse(200, json);
+    wifiScanStarted = false;
 }
 
 void handleWiFiConnect() {
@@ -1288,7 +1366,8 @@ void handleWiFiConnect() {
 
     const char *ssid = doc["ssid"];
     const char *password = doc["password"] | "";
-    if (ssid == nullptr || ssid[0] == '\0') {
+    if (ssid == nullptr || ssid[0] == '\0' || strlen(ssid) >= sizeof(wifiConnectTask.ssid) ||
+        strlen(password) >= sizeof(wifiConnectTask.password)) {
         sendTextResponse(400, "Missing SSID");
         return;
     }
@@ -1349,6 +1428,7 @@ void webserverInit() {
     registerProtectedRoute("/feeds/discard", HTTP_POST, handleFeedsDiscard);
     registerProtectedRoute("/feeds/reset", HTTP_POST, handleFeedsReset);
     registerProtectedRoute("/feeds/sync", HTTP_POST, handleFeedsSync);
+    registerProtectedRoute("/feeds/job", HTTP_GET, handleFeedJob);
     registerProtectedRoute("/feeds/search", HTTP_GET, handleFeedSearch);
     registerProtectedRoute("/api/update", HTTP_POST, handleApiUpdate);
     registerProtectedRoute("/api/dashboard", HTTP_POST, handleDashboardDataSave);
@@ -1400,6 +1480,15 @@ void webserverInit() {
                   handleOTAUpload();
               });
 
+    server.onNotFound([]() {
+        if (wifiFailsafeMode) {
+            server.sendHeader("Location", "http://" + WiFi.softAPIP().toString() + "/");
+            server.send(302, "text/plain", "Open setup dashboard");
+        } else {
+            sendTextResponse(404, "Not found");
+        }
+    });
+
     server.begin();
     Serial.println(F("Web server started"));
 }
@@ -1409,6 +1498,10 @@ void webserverHandle() {
 }
 
 void webserverProcessPendingActions() {
+    if (webserverHasPendingNetworkAction() && feedsBusy()) {
+        feedsCancelJobs();
+        return;
+    }
     if (rebootPending) {
         if (millis() - rebootRequestedAtMs >= 1000UL) {
             ESP.restart();
@@ -1431,7 +1524,8 @@ void webserverProcessPendingActions() {
 }
 
 bool webserverHasPendingNetworkAction() {
-    return rebootPending ||
+    return (wifiScanStarted && WiFi.scanComplete() == WIFI_SCAN_RUNNING) ||
+           rebootPending ||
            factoryResetPending ||
            wifiReconfigurePending ||
            wifiConnectTask.queued ||

@@ -8,6 +8,9 @@
 #include <LittleFS.h>
 #include <WiFiClientSecureBearSSL.h>
 #include <ctype.h>
+#include <cont.h>
+#include <lwip/tcp.h>
+#include <include/ClientContext.h>
 #include <limits.h>
 #include <math.h>
 
@@ -24,24 +27,14 @@ constexpr uint16_t kHomeAssistantMinRefreshMinutes = 1;
 constexpr uint16_t kHomeAssistantMaxRefreshMinutes = 240;
 constexpr uint32_t kHttpTimeoutMs = 12000;
 constexpr uint32_t kFeedStartupGracePeriodMs = 15000UL;
-constexpr uint32_t kHttpsPreferredFreeHeapBytes = 24000UL;
-constexpr uint32_t kHttpsMinFreeHeapBytes = 15000UL;
+constexpr uint32_t kHttpsMinFreeHeapBytes = 24000UL;
 constexpr uint16_t kHttpsDefaultRecvBufferBytes = 16384;
-constexpr uint16_t kHttpsCompactRecvBufferBytes = 4096;
 constexpr uint16_t kHttpsCompactXmitBufferBytes = 512;
-constexpr uint8_t kHttpsHostProfileCount = 4;
+constexpr uint32_t kRequestDeadlineMs = 24000UL;
 
 FeedConfig savedFeedConfig;
 bool feedDraftActive = false;
 uint32_t feedsStartupReadyAtMs = 0;
-
-struct HttpsHostProfile {
-    bool used;
-    bool probed;
-    char host[40];
-    uint16_t port;
-    uint16_t fragmentLength;
-};
 
 struct HttpJsonRequestOptions {
     const char *authorizationBearer;
@@ -49,99 +42,31 @@ struct HttpJsonRequestOptions {
     const char *fingerprint;
 };
 
-HttpsHostProfile httpsHostProfiles[kHttpsHostProfileCount] = {};
+// Use the actual BearSSL socket context: the public WiFiClientSecure wrapper
+// has no base socket, and abort() would otherwise flush TLS while suspended.
+class FeedTlsClient : public BearSSL::WiFiClientSecureCtx {
+public:
+    void abortTransport() { if (_client) _client->abort(); }
+};
+FeedTlsClient *activeTlsClient = nullptr;
+std::unique_ptr<cont_t> feedContinuation;
+uint16_t pendingSyncMask = 0;
+uint16_t activeSyncMask = 0;
+bool feedJobRunning = false;
+bool feedJobComplete = false;
+bool feedJobsCancelled = false;
+bool lastSyncSuccess = false;
+String lastSyncError;
+WiFiClient *activeHttpClient = nullptr;
+uint32_t activeRequestStartedMs = 0;
+bool activeRequestExpired = false;
+FeedSearchStatus searchStatus = FEED_SEARCH_IDLE;
+String searchQuery, searchJson, searchError;
+
 
 bool feedConfigEquals(const FeedConfig &left, const FeedConfig &right);
 void updateDraftState();
 void copyString(char *destination, size_t destinationSize, const char *source);
-
-bool extractUrlHostPort(const String &url, String &host, uint16_t &port) {
-    int schemeEnd = url.indexOf("://");
-    if (schemeEnd < 0) {
-        return false;
-    }
-
-    int hostStart = schemeEnd + 3;
-    if (hostStart >= static_cast<int>(url.length())) {
-        return false;
-    }
-
-    int pathStart = url.indexOf('/', hostStart);
-    String authority = pathStart >= 0 ? url.substring(hostStart, pathStart) : url.substring(hostStart);
-    if (authority.length() == 0) {
-        return false;
-    }
-
-    int portSeparator = authority.indexOf(':');
-    if (portSeparator >= 0) {
-        host = authority.substring(0, portSeparator);
-        int parsedPort = authority.substring(portSeparator + 1).toInt();
-        port = parsedPort > 0 ? static_cast<uint16_t>(parsedPort) : 443;
-    } else {
-        host = authority;
-        port = url.startsWith("https://") ? 443 : 80;
-    }
-
-    host.trim();
-    return host.length() > 0;
-}
-
-HttpsHostProfile* findHttpsHostProfile(const String &host, uint16_t port) {
-    HttpsHostProfile *freeSlot = nullptr;
-
-    for (uint8_t index = 0; index < kHttpsHostProfileCount; ++index) {
-        HttpsHostProfile &profile = httpsHostProfiles[index];
-        if (!profile.used) {
-            if (freeSlot == nullptr) {
-                freeSlot = &profile;
-            }
-            continue;
-        }
-
-        if (profile.port == port && host.equalsIgnoreCase(profile.host)) {
-            return &profile;
-        }
-    }
-
-    if (freeSlot != nullptr) {
-        memset(freeSlot, 0, sizeof(*freeSlot));
-        freeSlot->used = true;
-        freeSlot->port = port;
-        copyString(freeSlot->host, sizeof(freeSlot->host), host.c_str());
-    }
-
-    return freeSlot;
-}
-
-uint16_t detectHttpsFragmentLength(const String &host, uint16_t port) {
-    HttpsHostProfile *profile = findHttpsHostProfile(host, port);
-    if (profile != nullptr && profile->probed) {
-        return profile->fragmentLength;
-    }
-
-    static const uint16_t candidateLengths[] = {512, 1024, 2048, 4096};
-    uint16_t fragmentLength = 0;
-    for (uint8_t index = 0; index < sizeof(candidateLengths) / sizeof(candidateLengths[0]); ++index) {
-        uint16_t candidate = candidateLengths[index];
-        if (BearSSL::WiFiClientSecure::probeMaxFragmentLength(host, port, candidate)) {
-            fragmentLength = candidate;
-            break;
-        }
-    }
-
-    if (profile != nullptr) {
-        profile->probed = true;
-        profile->fragmentLength = fragmentLength;
-    }
-
-    if (fragmentLength > 0) {
-        logPrintf("HTTPS MFLN detected: %s:%u -> %u", host.c_str(), port, fragmentLength);
-    } else {
-        logPrintf("HTTPS MFLN unavailable: %s:%u", host.c_str(), port);
-    }
-
-    return fragmentLength;
-}
 
 bool buildTempPath(const char *path, char *tempPath, size_t tempPathSize) {
     int tempPathLength = snprintf(tempPath, tempPathSize, "%s.tmp", path);
@@ -975,11 +900,58 @@ const char* weatherCodeToText(int code) {
     }
 }
 
+// Bound parser work as well as network waits; filtered JSON still consumes the
+// entire response. Yield every 256 bytes and reject unexpectedly large bodies.
+class FeedJsonStream : public Stream {
+public:
+    explicit FeedJsonStream(Stream &source) : source_(source) { setTimeout(kHttpTimeoutMs); }
+    int available() override { return exhausted() ? 0 : source_.available(); }
+    int peek() override { return exhausted() ? -1 : source_.peek(); }
+    int read() override {
+        if (exhausted()) return -1;
+        int value = source_.read();
+        if (value >= 0 && (++consumed_ % 256) == 0) yield();
+        return value;
+    }
+    size_t readBytes(char *buffer, size_t length) override {
+        size_t received = 0;
+        uint32_t lastProgress = millis();
+        while (received < length && !exhausted()) {
+            int value = read();
+            if (value >= 0) {
+                buffer[received++] = static_cast<char>(value);
+                lastProgress = millis();
+            } else {
+                if (millis() - lastProgress >= kHttpTimeoutMs) break;
+                yield();
+            }
+        }
+        return received;
+    }
+    size_t write(uint8_t) override { return 0; }
+    bool exhausted() const { return consumed_ >= 131072UL || activeRequestExpired; }
+private:
+    Stream &source_;
+    uint32_t consumed_ = 0;
+};
+
 bool httpGetJson(const String &url,
                  JsonDocument &doc,
                  String *error,
                  JsonDocument *filter = nullptr,
                  const HttpJsonRequestOptions *options = nullptr) {
+    if (feedJobsCancelled) {
+        if (error) *error = "Feed job cancelled";
+        return false;
+    }
+    struct RequestGuard {
+        RequestGuard() { activeRequestStartedMs = millis(); activeRequestExpired = false; }
+        ~RequestGuard() { activeHttpClient = nullptr; }
+    } requestGuard;
+    struct ActiveClientGuard {
+        explicit ActiveClientGuard(WiFiClient *client) { activeHttpClient = client; }
+        ~ActiveClientGuard() { activeHttpClient = nullptr; activeTlsClient = nullptr; }
+    };
     auto finishJsonRequest = [&](HTTPClient &http, const char *transportLabel) {
         http.addHeader("Accept", "application/json");
         if (options != nullptr &&
@@ -1000,33 +972,43 @@ bool httpGetJson(const String &url,
                           transportLabel,
                           responseCode,
                           httpError.c_str(),
-                          url.c_str());
+                          "feed request");
             } else {
-                logPrintf("%s GET failed: %d (%s)", transportLabel, responseCode, url.c_str());
+                logPrintf("%s GET failed: %d (%s)", transportLabel, responseCode, "feed request");
             }
             http.end();
             return false;
         }
 
+        if (http.getSize() > 131072) {
+            if (error) *error = "Response too large";
+            http.end();
+            return false;
+        }
         doc.clear();
+        FeedJsonStream body(http.getStream());
         DeserializationError jsonError =
             filter == nullptr
-                ? deserializeJson(doc, http.getStream())
+                ? deserializeJson(doc, body)
                 : deserializeJson(doc,
-                                  http.getStream(),
+                                  body,
                                   DeserializationOption::Filter(filter->as<JsonVariantConst>()));
         http.end();
 
-        if (jsonError) {
+        if (jsonError || body.exhausted()) {
             if (error != nullptr) {
-                *error = jsonError == DeserializationError::NoMemory
+                *error = body.exhausted() ? (activeRequestExpired ? "Request deadline exceeded" : "Response too large") : jsonError == DeserializationError::NoMemory
                              ? "JSON memory exhausted"
                              : String(jsonError.c_str());
             }
-            logPrintf("%s JSON parse failed: %s (%s)", transportLabel, jsonError.c_str(), url.c_str());
+            logPrintf("%s JSON parse failed: %s (%s)", transportLabel, jsonError.c_str(), "feed request");
             return false;
         }
 
+        if (activeRequestExpired) {
+            if (error) *error = "Request deadline exceeded";
+            return false;
+        }
         return true;
     };
 
@@ -1037,6 +1019,7 @@ bool httpGetJson(const String &url,
 
     if (url.startsWith("http://")) {
         WiFiClient client;
+        ActiveClientGuard activeGuard(&client);
         if (!http.begin(client, url)) {
             if (error != nullptr) {
                 *error = "HTTP begin failed";
@@ -1064,48 +1047,15 @@ bool httpGetJson(const String &url,
         }
     } displayHeapGuard;
 
-    uint32_t freeHeap = ESP.getFreeHeap();
-    if (freeHeap < kHttpsMinFreeHeapBytes) {
-        if (error != nullptr) {
-            *error = "Low heap, retrying later";
-        }
-        logPrintf("Skipping HTTPS request, free heap too low: %u (%s)", freeHeap, url.c_str());
+    if (ESP.getFreeHeap() < kHttpsMinFreeHeapBytes) {
+        if (error) *error = "Low heap, retrying later";
         return false;
     }
-
-    if (freeHeap < kHttpsPreferredFreeHeapBytes) {
-        logPrintf("HTTPS request in low-heap window: %u (%s)", freeHeap, url.c_str());
-    }
-
-    std::unique_ptr<BearSSL::WiFiClientSecure> client(new BearSSL::WiFiClientSecure());
+    std::unique_ptr<FeedTlsClient> client(new FeedTlsClient());
     if (!client) {
-        if (error != nullptr) {
-            *error = "TLS client allocation failed";
-        }
+        if (error) *error = "TLS client allocation failed";
         return false;
     }
-
-    String host;
-    uint16_t port = 443;
-    uint16_t recvBufferSize = kHttpsDefaultRecvBufferBytes;
-    if (extractUrlHostPort(url, host, port)) {
-        HttpsHostProfile *profile = findHttpsHostProfile(host, port);
-        if (profile != nullptr && profile->probed) {
-            if (profile->fragmentLength > 0) {
-                recvBufferSize = profile->fragmentLength;
-            }
-        } else if (freeHeap >= kHttpsPreferredFreeHeapBytes) {
-            uint16_t fragmentLength = detectHttpsFragmentLength(host, port);
-            if (fragmentLength > 0) {
-                recvBufferSize = fragmentLength;
-            }
-        } else {
-            logPrintf("Skipping HTTPS MFLN probe, low heap window: %u (%s)",
-                      freeHeap,
-                      host.c_str());
-        }
-    }
-
     if (options != nullptr &&
         options->tlsMode == HOME_ASSISTANT_TLS_FINGERPRINT) {
         if (options->fingerprint == nullptr || options->fingerprint[0] == '\0') {
@@ -1124,12 +1074,9 @@ bool httpGetJson(const String &url,
     } else {
         client->setInsecure();
     }
-    client->setBufferSizes(recvBufferSize, kHttpsCompactXmitBufferBytes);
-    logPrintf("HTTPS buffers: recv=%u xmit=%u (%s)",
-              recvBufferSize,
-              kHttpsCompactXmitBufferBytes,
-              url.c_str());
-
+    client->setBufferSizes(kHttpsDefaultRecvBufferBytes, kHttpsCompactXmitBufferBytes);
+    ActiveClientGuard activeGuard(client.get());
+    activeTlsClient = client.get();
     if (!http.begin(*client, url)) {
         if (error != nullptr) {
             *error = "HTTP begin failed";
@@ -1980,72 +1927,99 @@ void applyConfigObject(JsonObjectConst root) {
     normalizeConfig();
 }
 
-bool syncWeatherIfDue(uint32_t now) {
-    if (feedConfig.weather.source != WEATHER_FEED_OPEN_METEO || !feedsWeatherConfigured()) {
-        return false;
-    }
+constexpr uint16_t kWeatherJob = 1;
+constexpr uint16_t kHomeAssistantJob = 2;
+constexpr uint16_t kMarketJobBase = 4;
 
-    uint32_t intervalMs = static_cast<uint32_t>(feedConfig.weather.refreshMinutes) * 60UL * 1000UL;
-    if (feedRuntime.weather.syncing) {
-        return false;
+void runFeedJob() {
+    if (searchStatus == FEED_SEARCH_PENDING && activeSyncMask == 0) {
+        bool success = feedsSearchWeatherLocations(searchQuery, searchJson, &searchError);
+        searchStatus = success ? FEED_SEARCH_READY : FEED_SEARCH_FAILED;
+    } else {
+        bool anySuccess = false;
+        String firstError;
+        auto record = [&](bool success, const String &error) {
+            anySuccess = anySuccess || success;
+            if (!success && firstError.isEmpty()) firstError = error;
+        };
+        String error;
+        if (activeSyncMask & kWeatherJob) {
+            record(syncWeather(&error), error);
+            yield();
+        }
+        for (uint8_t index = 0; index < DASHBOARD_MARKET_COUNT; ++index) {
+            if (activeSyncMask & (kMarketJobBase << index)) {
+                error = "";
+                record(syncMarket(index, &error), error);
+                yield();
+            }
+        }
+        if (activeSyncMask & kHomeAssistantJob) {
+            error = "";
+            bool success = syncHomeAssistant(&error);
+            // A partial poll must remain visibly unsuccessful at the job level.
+            if (feedRuntime.homeAssistant.lastError[0]) {
+                error = feedRuntime.homeAssistant.lastError;
+                success = false;
+            }
+            record(success, error);
+        }
+        lastSyncSuccess = anySuccess && firstError.isEmpty();
+        lastSyncError = firstError;
     }
-
-    if (feedRuntime.weather.lastAttemptMs != 0 && now - feedRuntime.weather.lastAttemptMs < intervalMs) {
-        return false;
+    if (feedJobsCancelled) {
+        lastSyncSuccess = false;
+        lastSyncError = "Feed job cancelled";
+        if (searchStatus == FEED_SEARCH_READY || searchStatus == FEED_SEARCH_PENDING) {
+            searchStatus = FEED_SEARCH_FAILED;
+            searchError = lastSyncError;
+        }
     }
-
-    String error;
-    bool success = syncWeather(&error);
-    if (!success && error.length() > 0) {
-        logPrintf("Weather sync failed: %s", error.c_str());
-    }
-    return success;
+    feedJobComplete = true;
 }
 
-bool syncMarketIfDue(uint8_t index, uint32_t now) {
-    if (index >= DASHBOARD_MARKET_COUNT || !feedsMarketConfigured(index)) {
-        return false;
+void pumpFeedJob() {
+    if (!feedJobRunning) {
+        if (pendingSyncMask == 0 && searchStatus != FEED_SEARCH_PENDING) return;
+        feedContinuation.reset(new (std::nothrow) cont_t);
+        if (!feedContinuation) {
+            lastSyncSuccess = false;
+            lastSyncError = "Feed worker allocation failed";
+            pendingSyncMask = 0;
+            if (searchStatus == FEED_SEARCH_PENDING) {
+                searchStatus = FEED_SEARCH_FAILED;
+                searchError = lastSyncError;
+            }
+            return;
+        }
+        cont_init(feedContinuation.get());
+        activeSyncMask = pendingSyncMask;
+        pendingSyncMask = 0;
+        feedJobRunning = true;
+        feedJobComplete = false;
     }
-
-    MarketFeedRuntime &runtime = feedRuntime.markets[index];
-    uint32_t intervalMs = static_cast<uint32_t>(feedConfig.markets[index].refreshMinutes) * 60UL * 1000UL;
-    if (runtime.syncing) {
-        return false;
+    if (activeHttpClient && (feedJobsCancelled || millis() - activeRequestStartedMs >= kRequestDeadlineMs)) {
+        activeRequestExpired = true;
+        if (activeTlsClient) activeTlsClient->abortTransport();
+        else activeHttpClient->abort();
     }
-
-    if (runtime.lastAttemptMs != 0 && now - runtime.lastAttemptMs < intervalMs) {
-        return false;
+    // Every core yield suspends this worker to this call site. The main
+    // continuation must be restored before returning to application code.
+    struct ContinuationGuard {
+        cont_t *previous;
+        explicit ContinuationGuard(cont_t *worker) : previous(g_pcont) { g_pcont = worker; }
+        ~ContinuationGuard() { g_pcont = previous; }
+    };
+    {
+        ContinuationGuard guard(feedContinuation.get());
+        cont_run(feedContinuation.get(), runFeedJob);
+        cont_check(feedContinuation.get());
     }
-
-    String error;
-    bool success = syncMarket(index, &error);
-    if (!success && error.length() > 0) {
-        logPrintf("Market sync failed: slot=%u error=%s", index, error.c_str());
+    if (feedJobComplete) {
+        feedJobRunning = false;
+        activeSyncMask = 0;
+        feedContinuation.reset();
     }
-    return success;
-}
-
-bool syncHomeAssistantIfDue(uint32_t now) {
-    if (!feedsHomeAssistantConfigured()) {
-        return false;
-    }
-
-    HomeAssistantRuntime &runtime = feedRuntime.homeAssistant;
-    uint32_t intervalMs = static_cast<uint32_t>(feedConfig.homeAssistant.refreshMinutes) * 60UL * 1000UL;
-    if (runtime.syncing) {
-        return false;
-    }
-
-    if (runtime.lastAttemptMs != 0 && now - runtime.lastAttemptMs < intervalMs) {
-        return false;
-    }
-
-    String error;
-    bool success = syncHomeAssistant(&error);
-    if (!success && error.length() > 0) {
-        logPrintf("Home Assistant sync failed: %s", error.c_str());
-    }
-    return success;
 }
 
 }  // namespace
@@ -2078,6 +2052,7 @@ bool feedsLoadConfig() {
 }
 
 bool feedsSaveConfig() {
+    if (feedsBusy()) return false;
     normalizeConfig();
 
     JsonDocument doc;
@@ -2090,6 +2065,10 @@ bool feedsSaveConfig() {
 }
 
 bool feedsPreviewConfigJson(const String &json, String *error) {
+    if (feedsBusy()) {
+        if (error) *error = "Feed job already running";
+        return false;
+    }
     JsonDocument doc;
     DeserializationError deserializeError = deserializeJson(doc, json);
     if (deserializeError) {
@@ -2138,6 +2117,7 @@ bool feedsApplyConfigJson(const String &json, String *error) {
 }
 
 void feedsDiscardDraftChanges() {
+    if (feedsBusy()) return;
     FeedConfig previousConfig = feedConfig;
     memcpy(&feedConfig, &savedFeedConfig, sizeof(feedConfig));
     clearRuntimeForInactiveSources();
@@ -2169,75 +2149,81 @@ void feedsBuildStateJson(String &json) {
     fillStatusJson(doc["status"].to<JsonObject>());
     JsonObject meta = doc["meta"].to<JsonObject>();
     meta["hasDraft"] = feedDraftActive;
+    meta["syncPending"] = feedsBusy();
+    meta["lastSyncSuccess"] = lastSyncSuccess;
+    meta["lastSyncError"] = lastSyncError;
     json = "";
     serializeJson(doc, json);
 }
 
+bool feedsBusy() {
+    return feedJobRunning || pendingSyncMask != 0 || searchStatus == FEED_SEARCH_PENDING;
+}
+
+void feedsCancelJobs() {
+    feedJobsCancelled = true;
+    pendingSyncMask = 0;
+    if (!feedJobRunning && searchStatus == FEED_SEARCH_PENDING) {
+        searchStatus = FEED_SEARCH_FAILED;
+        searchError = "Feed job cancelled";
+    }
+    // Socket-only cancellation retains BearSSL engine and worker locals until
+    // the suspended network call returns and its normal destructors unwind.
+    if (activeHttpClient) {
+        activeRequestExpired = true;
+        if (activeTlsClient) activeTlsClient->abortTransport();
+        else activeHttpClient->abort();
+    }
+}
+
 bool feedsSyncNow(const char *scope, String *error) {
-    String scopeValue = scope != nullptr ? String(scope) : String("all");
-    scopeValue.toLowerCase();
-
-    bool wantWeather = scopeValue == "all" || scopeValue == "weather";
-    bool wantMarkets = scopeValue == "all" || scopeValue == "markets";
-    bool wantHomeAssistant = scopeValue == "all" || scopeValue == "home" || scopeValue == "home-assistant";
-
-    bool anyConfigured = false;
-    bool anySuccess = false;
-    String firstError;
-
-    if (wantWeather && feedConfig.weather.source == WEATHER_FEED_OPEN_METEO && feedsWeatherConfigured()) {
-        anyConfigured = true;
-        String weatherError;
-        bool success = syncWeather(&weatherError);
-        anySuccess = anySuccess || success;
-        if (!success && firstError.isEmpty()) {
-            firstError = weatherError;
-        }
-    }
-
-    if (wantMarkets) {
-        for (uint8_t index = 0; index < DASHBOARD_MARKET_COUNT; ++index) {
-            if (feedConfig.markets[index].source != MARKET_FEED_FINNHUB &&
-                feedConfig.markets[index].source != MARKET_FEED_COINGECKO) {
-                continue;
-            }
-            if (!feedsMarketConfigured(index)) {
-                continue;
-            }
-
-            anyConfigured = true;
-            String marketError;
-            bool success = syncMarket(index, &marketError);
-            anySuccess = anySuccess || success;
-            if (!success && firstError.isEmpty()) {
-                firstError = marketError;
-            }
-            yield();
-        }
-    }
-
-    if (wantHomeAssistant && feedsHomeAssistantConfigured()) {
-        anyConfigured = true;
-        String homeAssistantError;
-        bool success = syncHomeAssistant(&homeAssistantError);
-        anySuccess = anySuccess || success;
-        if (!success && firstError.isEmpty()) {
-            firstError = homeAssistantError;
-        }
-    }
-
-    if (!anyConfigured) {
-        if (error != nullptr) {
-            *error = "No live feeds configured";
-        }
+    if (feedsBusy()) {
+        if (error) *error = "Feed job already running";
         return false;
     }
-
-    if (!anySuccess && error != nullptr) {
-        *error = firstError.isEmpty() ? "Feed sync failed" : firstError;
+    String value = scope ? scope : "all";
+    value.toLowerCase();
+    if (value != "all" && value != "weather" && value != "markets" && value != "home" && value != "home-assistant") {
+        if (error) *error = "Invalid feed scope";
+        return false;
     }
+    uint16_t jobs = 0;
+    if ((value == "all" || value == "weather") && feedConfig.weather.source == WEATHER_FEED_OPEN_METEO && feedsWeatherConfigured()) jobs |= kWeatherJob;
+    if (value == "all" || value == "markets") {
+        for (uint8_t index = 0; index < DASHBOARD_MARKET_COUNT; ++index) {
+            if (feedsMarketConfigured(index) && (feedConfig.markets[index].source == MARKET_FEED_FINNHUB || feedConfig.markets[index].source == MARKET_FEED_COINGECKO)) jobs |= kMarketJobBase << index;
+        }
+    }
+    if ((value == "all" || value == "home" || value == "home-assistant") && feedsHomeAssistantConfigured()) jobs |= kHomeAssistantJob;
+    if (!jobs) {
+        if (error) *error = "No live feeds configured";
+        return false;
+    }
+    feedJobsCancelled = false;
+    pendingSyncMask = jobs;
+    lastSyncError = "";
+    return true;
+}
 
-    return anySuccess;
+bool feedsQueueWeatherSearch(const String &query, String *error) {
+    String trimmed = query;
+    trimmed.trim();
+    if (trimmed.length() < 2 || trimmed.length() > 80 || feedsBusy()) {
+        if (error) *error = feedsBusy() ? "Feed job already running" : "Search must contain 2 to 80 characters";
+        return false;
+    }
+    feedJobsCancelled = false;
+    searchQuery = trimmed;
+    searchJson = "";
+    searchError = "";
+    searchStatus = FEED_SEARCH_PENDING;
+    return true;
+}
+
+FeedSearchStatus feedsWeatherSearchResult(String &json, String *error) {
+    if (searchStatus == FEED_SEARCH_READY) json = searchJson;
+    if (searchStatus == FEED_SEARCH_FAILED && error) *error = searchError;
+    return searchStatus;
 }
 
 bool feedsSearchWeatherLocations(const String &query, String &json, String *error) {
@@ -2269,37 +2255,31 @@ bool feedsSearchWeatherLocations(const String &query, String &json, String *erro
 }
 
 void feedsLoop() {
+    uint32_t now = millis();
     uint32_t staleAfterMs = static_cast<uint32_t>(feedConfig.homeAssistant.refreshMinutes) * 120000UL;
     for (auto &slot : feedRuntime.homeAssistant.slots) {
-        if (slot.hasData && (slot.lastError[0] || millis() - slot.lastSuccessMs > staleAfterMs)) slot.stale = true;
+        if (slot.hasData && (slot.lastError[0] || now - slot.lastSuccessMs > staleAfterMs)) slot.stale = true;
     }
-    if (WiFi.status() != WL_CONNECTED) {
+    if (feedsBusy()) {
+        pumpFeedJob();
         return;
     }
-
-    uint32_t now = millis();
+    if (WiFi.status() != WL_CONNECTED) return;
     if (feedsStartupReadyAtMs == 0) {
         feedsStartupReadyAtMs = now + kFeedStartupGracePeriodMs;
-        logPrintf("Delaying automatic feed sync for %u ms after boot", kFeedStartupGracePeriodMs);
         return;
     }
-
-    if (static_cast<int32_t>(now - feedsStartupReadyAtMs) < 0) {
-        return;
-    }
-
-    bool anyUpdated = syncWeatherIfDue(now);
-
+    if (static_cast<int32_t>(now - feedsStartupReadyAtMs) < 0) return;
+    auto due = [&](uint32_t lastAttempt, uint16_t minutes) {
+        return lastAttempt == 0 || now - lastAttempt >= static_cast<uint32_t>(minutes) * 60000UL;
+    };
+    if (feedConfig.weather.source == WEATHER_FEED_OPEN_METEO && feedsWeatherConfigured() && due(feedRuntime.weather.lastAttemptMs, feedConfig.weather.refreshMinutes)) pendingSyncMask |= kWeatherJob;
     for (uint8_t index = 0; index < DASHBOARD_MARKET_COUNT; ++index) {
-        anyUpdated = syncMarketIfDue(index, now) || anyUpdated;
-        yield();
+        if (feedsMarketConfigured(index) && (feedConfig.markets[index].source == MARKET_FEED_FINNHUB || feedConfig.markets[index].source == MARKET_FEED_COINGECKO) && due(feedRuntime.markets[index].lastAttemptMs, feedConfig.markets[index].refreshMinutes)) pendingSyncMask |= kMarketJobBase << index;
     }
-
-    anyUpdated = syncHomeAssistantIfDue(now) || anyUpdated;
-
-    if (anyUpdated) {
-        logPrint(F("Feeds refreshed"));
-    }
+    if (feedsHomeAssistantConfigured() && due(feedRuntime.homeAssistant.lastAttemptMs, feedConfig.homeAssistant.refreshMinutes)) pendingSyncMask |= kHomeAssistantJob;
+    if (pendingSyncMask) feedJobsCancelled = false;
+    pumpFeedJob();
 }
 
 uint8_t feedsWeatherSource() {

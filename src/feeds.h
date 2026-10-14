@@ -130,6 +130,11 @@ void feedsDiscardDraftChanges();
 bool feedsHasDraftChanges();
 void feedsBuildStateJson(String &json);
 bool feedsSyncNow(const char *scope = "all", String *error = nullptr);
+bool feedsBusy();
+void feedsCancelJobs();
+enum FeedSearchStatus : uint8_t { FEED_SEARCH_IDLE, FEED_SEARCH_PENDING, FEED_SEARCH_READY, FEED_SEARCH_FAILED };
+bool feedsQueueWeatherSearch(const String &query, String *error = nullptr);
+FeedSearchStatus feedsWeatherSearchResult(String &json, String *error = nullptr);
 bool feedsSearchWeatherLocations(const String &query, String &json, String *error = nullptr);
 
 uint8_t feedsWeatherSource();

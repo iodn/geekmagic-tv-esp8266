@@ -1,6 +1,6 @@
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
-#include <WiFiManager.h>
+#include <DNSServer.h>
 #include <ESP8266mDNS.h>
 #include <ArduinoOTA.h>
 #include <LittleFS.h>
@@ -107,322 +107,91 @@ void applyConfiguredHostname() {
     WiFi.hostname(hostname);
 }
 
-bool tryConnectWiFi(int maxAttempts) {
-    Serial.printf("Attempting WiFi connection (max %d attempts)...\n", maxAttempts);
-
-    for (int attempt = 1; attempt <= maxAttempts; attempt++) {
-        Serial.printf("WiFi attempt %d/%d\n", attempt, maxAttempts);
-        char msgBuffer[64];
-        snprintf(msgBuffer, sizeof(msgBuffer), "WiFi...\nAttempt %d/%d", attempt, maxAttempts);
-        displayShowMessage(msgBuffer);
-
-        WiFi.mode(wifiFailsafeMode ? WIFI_AP_STA : WIFI_STA);
-        applyConfiguredHostname();
-        WiFi.begin();
-
-        unsigned long startAttempt = millis();
-        while (WiFi.status() != WL_CONNECTED &&
-               millis() - startAttempt < WIFI_CONNECTION_TIMEOUT) {
-            delay(100);
-            yield();
-        }
-
-                // Wait for IP address to be assigned after WiFi connection
-                if (WiFi.status() == WL_CONNECTED) {
-                    Serial.println(F("WiFi associated, waiting for IP..."));
-                    unsigned long ipWaitStart = millis();
-                    while (WiFi.localIP() == IPAddress(0,0,0,0) &&
-                           millis() - ipWaitStart < 10000) { // Wait up to 10 seconds for IP
-                        delay(100);
-                        yield();
-                    }
-                }
-
-                if (WiFi.status() == WL_CONNECTED && WiFi.localIP() != IPAddress(0,0,0,0)) {
-
-                    Serial.println(F("WiFi connected!"));
-
-                    Serial.printf("IP: %s\n", WiFi.localIP().toString().c_str());
-
-                    char ipMsgBuffer[64];
-                    snprintf(ipMsgBuffer, sizeof(ipMsgBuffer), "WiFi OK\n%s", WiFi.localIP().toString().c_str());
-                    displayShowMessage(ipMsgBuffer);
-
-                    delay(2000);
-
-                    return true;
-
-                }
-
-        
-
-                // Exponential backoff between retries (except on last attempt)
-
-                if (attempt < maxAttempts) {
-
-                    int delayMs = WIFI_RETRY_DELAY_MS * (1 << (attempt - 1)); // 2s, 4s, 8s, 16s...
-
-                    delayMs = min(delayMs, 30000); // Cap at 30 seconds
-
-                    Serial.printf("Retry in %d ms...\n", delayMs);
-
-                    delay(delayMs);
-
-                }
-
-            }
-
-        
-
-            return false;
-
-        }
-
-        
-
-        void setupWiFi() {
-
-            displayShowMessage(F("WiFi Setup..."));
-
-            Serial.println(F("=== WiFi Setup Start ==="));
-
-        
-
-            // Generate random AP password if not already generated
-
-            if (apPassword.isEmpty()) {
-
-                apPassword = generateRandomPassword(8);
-
-                Serial.printf("Generated AP Password: %s\n", apPassword.c_str());
-
-            }
-
-        
-
-            // Check if WiFi credentials are saved BEFORE attempting connection
-
-            String ssid = WiFi.SSID();
-
-        
-
-            // Flag to indicate if we need to proceed to the Failsafe AP section
-
-            bool needsFailsafeAP = false;
-
-        
-
-            if (ssid.isEmpty() || ssid.length() == 0) {
-
-                Serial.println(F("No saved WiFi credentials - going directly to failsafe AP"));
-
-                needsFailsafeAP = true;
-
-            } else {
-
-                // Try to connect to saved WiFi credentials with retry
-
-                Serial.println(F("Attempting to connect with saved credentials..."));
-
-                if (tryConnectWiFi(WIFI_RETRY_ATTEMPTS)) {
-
-                    wifiFailsafeMode = false;
-
-                    Serial.println(F("Connected successfully!"));
-
-                    return; // Exit setupWiFi as connection is established
-
-                } else {
-
-                    // Connection failed, try WiFiManager config portal
-
-                    Serial.println(F("WiFi connection failed - attempting WiFiManager config portal"));
-
-                    displayShowMessage(F("WiFi Failed!\nStarting AP..."));
-
-                    delay(1000);
-
-        
-
-                    // Set timeout - don't reset settings, let WiFiManager try saved credentials first
-                    WiFiManager wifiManager;
-                    wifiManager.setConfigPortalTimeout(WIFI_TIMEOUT);
-                    applyConfiguredHostname();
-
-                    Serial.printf("Starting WiFiManager autoConnect (timeout: %d seconds)...\n", WIFI_TIMEOUT);
-
-                    displayShowMessage(F("Config Portal\nStarting..."));
-
-                    yield();
-
-        
-
-                    // Try autoConnect with error handling
-
-                    Serial.println(F("Calling wifiManager.autoConnect()..."));
-
-                    bool connectedViaManager = wifiManager.autoConnect(WIFI_AP_NAME, apPassword.c_str());
-
-                    yield();
-
-                    Serial.printf("autoConnect returned: %s\n", connectedViaManager ? "true" : "false");
-
-        
-
-                    if (!connectedViaManager) {
-
-                        needsFailsafeAP = true;
-
-                    } else {
-
-                        wifiFailsafeMode = false;
-
-                        Serial.println(F("WiFiManager connected successfully!"));
-
-                        char ipMsgBuffer[64];
-                        snprintf(ipMsgBuffer, sizeof(ipMsgBuffer), "WiFi OK\n%s", WiFi.localIP().toString().c_str());
-                        displayShowMessage(ipMsgBuffer);
-
-                        delay(2000);
-
-                        return; // Exit setupWiFi as connection is established via manager
-
-                    }
-
-                }
-
-            }
-
-        
-
-            // This block is executed only if needsFailsafeAP is true
-
-            if (needsFailsafeAP) {
-
-                Serial.println(F("Entering failsafe AP mode"));
-
-                displayShowMessage(F("Starting\nFailsafe AP..."));
-
-                delay(1000);
-
-        
-
-                // Ensure WiFi is in AP mode
-
-                WiFi.disconnect(true, false);
-
-                yield();
-
-                WiFi.mode(WIFI_AP);
-
-                yield();
-
-        
-
-                Serial.printf("Attempting to start AP: SSID='%s', Password='%s'\n", WIFI_AP_NAME, apPassword.c_str());
-
-                bool apStarted = WiFi.softAP(WIFI_AP_NAME, apPassword.c_str());
-
-                Serial.printf("AP Start result: %s\n", apStarted ? "SUCCESS" : "FAILED");
-
-        
-
-                if (!apStarted) {
-
-                    // If AP failed to start, try one more time after delay
-
-                    Serial.println(F("AP start failed, retrying after delay..."));
-
-                    delay(2000);
-
-                    WiFi.mode(WIFI_OFF);
-
-                    delay(500);
-
-                    WiFi.mode(WIFI_AP);
-
-                    delay(500);
-
-                    apStarted = WiFi.softAP(WIFI_AP_NAME, apPassword.c_str());
-
-                    Serial.printf("Retry AP Start result: %s\n", apStarted ? "SUCCESS" : "FAILED");
-
-                }
-
-        
-
-                wifiFailsafeMode = true;
-
-        
-
-                Serial.printf("Failsafe AP started\n");
-
-                Serial.printf("  SSID: %s\n", WIFI_AP_NAME);
-
-                Serial.printf("  Password: %s\n", apPassword.c_str());
-
-                Serial.printf("  IP: %s\n", WiFi.softAPIP().toString().c_str());
-
-                displayBlankScreen(); // Blank screen before showing AP credentials
-        
-                displayShowAPScreen(WIFI_AP_NAME, apPassword.c_str(), WiFi.softAPIP().toString().c_str());
-
-                delay(5000);
-
-            }
-
-        
-
-            Serial.println(F("=== WiFi Setup Complete ==="));
+bool wifiReconnectActive = false;
+unsigned long wifiReconnectStartedAt = 0;
+unsigned long lastApStartAttempt = 0;
+bool setupApStarted = false;
+DNSServer setupDns;
+
+void ensureSetupAP() {
+    if (setupApStarted || (lastApStartAttempt != 0 && millis() - lastApStartAttempt < 2000UL)) {
+        return;
+    }
+    lastApStartAttempt = millis();
+    WiFi.mode(WIFI_AP_STA);
+    setupApStarted = WiFi.softAP(WIFI_AP_NAME, apPassword.c_str());
+    if (setupApStarted) {
+        setupDns.start(53, "*", WiFi.softAPIP());
+        displayShowAPScreen(WIFI_AP_NAME, apPassword.c_str(), WiFi.softAPIP().toString().c_str());
+    }
+}
+
+void startWiFiReconnect() {
+    if (WiFi.SSID().isEmpty()) {
+        return;
+    }
+    ensureSetupAP();
+    WiFi.mode(WIFI_AP_STA);
+    WiFi.setAutoReconnect(true);
+    WiFi.begin();
+    wifiReconnectStartedAt = millis();
+    lastWiFiReconnectAttempt = wifiReconnectStartedAt;
+    wifiReconnectActive = true;
+}
+
+void trackWiFiReconnectAttempt(bool active) {
+    wifiReconnectActive = active;
+    wifiReconnectStartedAt = millis();
+    lastWiFiReconnectAttempt = wifiReconnectStartedAt;
+}
+
+void setupWiFi() {
+    if (apPassword.isEmpty()) {
+        apPassword = generateRandomPassword(8);
+    }
+    applyConfiguredHostname();
+    wifiFailsafeMode = true;
+    // Keep setup access available while the station connects or retries.
+    ensureSetupAP();
+    startWiFiReconnect();
 }
 
 void monitorWiFi() {
-    // In failsafe mode, periodically try to reconnect to WiFi (only if credentials are saved)
-    if (wifiFailsafeMode) {
-        // Only attempt reconnection if WiFi credentials are actually saved
-        String ssid = WiFi.SSID();
-        if (!ssid.isEmpty() && ssid.length() > 0) {
-            if (millis() - lastWiFiReconnectAttempt > WIFI_RECONNECT_INTERVAL) {
-                Serial.println(F("Failsafe mode: attempting WiFi reconnection..."));
-                lastWiFiReconnectAttempt = millis();
-
-                if (tryConnectWiFi(2)) {  // Quick 2 attempts
-                    wifiFailsafeMode = false;
-                    Serial.println(F("Reconnected! Exiting failsafe mode"));
-                    // Restart to reinitialize services properly
-                    delay(1000);
-                    ESP.restart();
-                }
-            }
+    if (WiFi.status() == WL_CONNECTED && WiFi.localIP() != IPAddress(0, 0, 0, 0)) {
+        wifiReconnectActive = false;
+        if (wifiFailsafeMode) {
+            wifiFailsafeMode = false;
+            WiFi.softAPdisconnect(true);
+            setupDns.stop();
+            setupApStarted = false;
+            WiFi.mode(WIFI_STA);
+            displayState.apMode = false;
+            displayBlankScreen();
+            logPrintf("WiFi connected: %s", WiFi.localIP().toString().c_str());
         }
         return;
     }
 
-    // Normal mode: check WiFi connection periodically
-    if (millis() - lastWiFiCheck > WIFI_MONITOR_INTERVAL) {
-        lastWiFiCheck = millis();
-
-        if (WiFi.status() != WL_CONNECTED) {
-            Serial.println(F("WiFi connection lost - attempting reconnection"));
-
-            if (!tryConnectWiFi(3)) {  // Try 3 quick attempts
-                Serial.println(F("Reconnection failed - entering failsafe mode"));
-
-                WiFi.mode(WIFI_AP);
-                WiFi.softAP(WIFI_AP_NAME, apPassword.c_str());
-                wifiFailsafeMode = true;
-
-                Serial.printf("Failsafe AP started\n");
-                Serial.printf("  SSID: %s\n", WIFI_AP_NAME);
-                Serial.printf("  Password: %s\n", apPassword.c_str());
-                Serial.printf("  IP: %s\n", WiFi.softAPIP().toString().c_str());
-
-                displayBlankScreen(); // Blank screen before showing AP credentials
-                // Set AP mode display state
-                displayShowAPScreen(WIFI_AP_NAME, apPassword.c_str(), WiFi.softAPIP().toString().c_str());
-                delay(3000);
-            }
+    if (!wifiFailsafeMode) {
+        wifiFailsafeMode = true;
+        setupApStarted = false;
+        mdnsStarted = false;
+        MDNS.end();
+        if (otaStarted) {
+            ArduinoOTA.end();
+            otaStarted = false;
         }
+    }
+    ensureSetupAP();
+    if (wifiReconnectActive) {
+        if (millis() - wifiReconnectStartedAt >= WIFI_CONNECTION_TIMEOUT) {
+            // Stop this attempt without erasing the saved station configuration.
+            WiFi.disconnect(false, false);
+            wifiReconnectActive = false;
+        }
+    } else if (lastWiFiReconnectAttempt == 0 ||
+               millis() - lastWiFiReconnectAttempt >= WIFI_RECONNECT_INTERVAL) {
+        startWiFiReconnect();
     }
 }
 
@@ -863,6 +632,10 @@ void setup() {
 
 void loop() {
 
+    if (wifiFailsafeMode) {
+        setupDns.processNextRequest();
+    }
+
     // Reset power cycle counter after 10 seconds of successful uptime
 
     // This prevents accidental factory reset from normal reboots
@@ -882,7 +655,10 @@ void loop() {
     bool networkActionBusy = webserverHasPendingNetworkAction();
 
     // Monitor WiFi connection and handle failsafe mode
-    if (!networkActionBusy) {
+    if (feedsBusy() && WiFi.status() != WL_CONNECTED) {
+        feedsCancelJobs();
+    }
+    if (!networkActionBusy && !feedsBusy()) {
         monitorWiFi();
     }
 
@@ -900,13 +676,15 @@ void loop() {
     networkActionBusy = webserverHasPendingNetworkAction();
 
     // Only handle OTA and mDNS if not in failsafe mode
-    if (!wifiFailsafeMode && !networkActionBusy) {
-        startDeferredNetworkServices();
-        if (otaStarted) {
-            ArduinoOTA.handle();
-        }
-        if (mdnsStarted) {
-            MDNS.update();
+    if (!wifiFailsafeMode) {
+        if (!networkActionBusy) {
+            startDeferredNetworkServices();
+            if (otaStarted && !feedsBusy()) {
+                ArduinoOTA.handle();
+            }
+            if (mdnsStarted) {
+                MDNS.update();
+            }
         }
         // Only update time if not showing an image
         if (!displayState.showImage) {
@@ -933,7 +711,8 @@ void loop() {
         webserverApplyEffectiveBrightness(false);
         lastDisplayProfileCheck = millis();
     }
-    if (!wifiFailsafeMode && !recoveryBootMode && !networkActionBusy && timeServicesStarted) {
+    if (feedsBusy() ||
+        (!wifiFailsafeMode && !recoveryBootMode && !networkActionBusy && timeServicesStarted)) {
         feedsLoop();
     }
 
