@@ -53,6 +53,10 @@ public:
         if (socket) socket->abort();
     }
 };
+class FeedHttpClient : public HTTPClient {
+public:
+    WiFiClient *transportClient() const { return _client.get(); }
+};
 FeedTlsClient *activeTlsClient = nullptr;
 std::unique_ptr<cont_t> feedContinuation;
 uint16_t pendingSyncMask = 0;
@@ -1049,20 +1053,20 @@ bool httpGetJson(const String &url,
         return true;
     };
 
-    HTTPClient http;
+    FeedHttpClient http;
     http.setTimeout(kHttpTimeoutMs);
     http.useHTTP10(true);
     http.setUserAgent(F("SmartClock/1.0"));
 
     if (url.startsWith("http://")) {
         WiFiClient client;
-        ActiveClientGuard activeGuard(&client);
         if (!http.begin(client, url)) {
             if (error != nullptr) {
                 *error = F("HTTP begin failed");
             }
             return false;
         }
+        ActiveClientGuard activeGuard(http.transportClient());
 
         return finishJsonRequest(http, "HTTP");
     }
@@ -1112,14 +1116,14 @@ bool httpGetJson(const String &url,
         client->setInsecure();
     }
     client->setBufferSizes(kHttpsDefaultRecvBufferBytes, kHttpsCompactXmitBufferBytes);
-    ActiveClientGuard activeGuard(client.get());
-    activeTlsClient = client.get();
     if (!http.begin(*client, url)) {
         if (error != nullptr) {
             *error = F("HTTP begin failed");
         }
         return false;
     }
+    ActiveClientGuard activeGuard(http.transportClient());
+    activeTlsClient = client.get();
 
     return finishJsonRequest(http, "HTTPS");
 }
