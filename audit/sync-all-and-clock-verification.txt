@@ -1,0 +1,49 @@
+Sync all memory fixes and persistent device clock — 2026-10-14
+
+Firmware: 2.3.1; settings schema remains 3.
+
+Changes
+
+ac91ce3 removes JPEG rendering, picture uploads, picture routes, dashboard
+controls and the decoder dependency. Reserved EEPROM bytes preserve the
+existing settings layout. Firmware OTA uploads remain available.
+063cec9 defers large dashboard/feed state responses during feed work, with
+pending responses preserving controls and drafts.
+587394a streams CoinGecko search candidates instead of retaining every match.
+298481c compacts JSON pools and reserves primary RAM for the WiFi driver.
+486dd1a adds local time to every dashboard page, including weather and markets.
+29a0b59 places market labels in the colored top position and symbols below.
+Each fix and requested display change is committed separately.
+
+Validation
+
+All 22 host regression suites pass, including pending-state behavior.
+Browser checks cover the generated gzip dashboard, all six tabs at
+320/375/1280px and OTA.
+Actual TFT font previews cover nine pages and all fourteen palettes, including
+12/24-hour time, AM/PM, unsynchronized time, long labels and allocation fallback.
+A minute change updates only the footer clock without repainting the page.
+Market label/symbol positions, fonts and theme colors are checked directly.
+EEPROM structure size and field offsets match the previous layout.
+
+With 5,001 synthetic CoinGecko candidates, the original filtered full-array
+parser uses 875,232 bytes at peak on the host; the final streaming parser uses
+2,648 bytes. These host measurements are not ESP8266 byte-for-byte estimates.
+
+On-device startup weather, Finnhub and CoinGecko updates complete successfully.
+Two additional Sync all batches queued through feedsSyncNow("all") both finish
+with success=1 and no reboot. The temporary test harness is removed from the
+final firmware, verified in the linked symbols. The final build boots normally,
+retains settings, completes automatic feed updates, and has approximately
+7.7 KB of primary RAM free during the previously failing lookup phase.
+The user also retested the final dashboard/device and confirmed: "All good now".
+
+Final artifact
+
+.pio/build/nodemcuv2/geekmagic-tv-esp8266-v2.3.1.bin
+Size: 687,680 bytes.
+SHA256: 5055cf4f8e01fbb2c8b9a801f09517517e713d8858c1aa035a69eb83fdedfa20
+Build RAM: 45,832 bytes; flash: 683,527 bytes.
+RAM use is 5,156 bytes below the build preceding picture removal.
+Flashed over USB at 115200 baud, application only, with hash verification.
+No device backup was created. WiFi, authentication and feed settings are retained.
