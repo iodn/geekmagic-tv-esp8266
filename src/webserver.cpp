@@ -557,10 +557,10 @@ void startQueuedWiFiConnect() {
     wifiConnectTask.previousPersistent = WiFi.getPersistent();
     WiFi.persistent(false);
     WiFi.setAutoReconnect(true);
-    WiFi.softAPdisconnect(true);
     delay(100);
 
-    WiFi.mode(WIFI_STA);
+    WiFi.mode(WIFI_AP_STA);
+    WiFi.softAP(WIFI_AP_NAME, apPassword.c_str());
     delay(100);
     char hostname[SETTINGS_HOSTNAME_LENGTH];
     copyConfiguredHostname(hostname, sizeof(hostname));

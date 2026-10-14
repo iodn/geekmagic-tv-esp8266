@@ -116,7 +116,7 @@ bool tryConnectWiFi(int maxAttempts) {
         snprintf(msgBuffer, sizeof(msgBuffer), "WiFi...\nAttempt %d/%d", attempt, maxAttempts);
         displayShowMessage(msgBuffer);
 
-        WiFi.mode(WIFI_STA);
+        WiFi.mode(wifiFailsafeMode ? WIFI_AP_STA : WIFI_STA);
         applyConfiguredHostname();
         WiFi.begin();
 
